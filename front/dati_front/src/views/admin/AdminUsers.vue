@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { Download, Edit, Plus, Refresh, SwitchButton, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, downloadBlob } from '@/services/api'
@@ -9,6 +9,7 @@ const selectedId = ref(null)
 const loading = ref(false)
 const saving = ref(false)
 const downloading = ref(false)
+const userDialogVisible = ref(false)
 const importVisible = ref(false)
 const importing = ref(false)
 const importFile = ref(null)
@@ -40,9 +41,7 @@ const rules = {
 
 const selectedUser = computed(() => users.value.find((item) => item.id === selectedId.value))
 
-function resetForm() {
-  selectedId.value = null
-  formRef.value?.clearValidate()
+function fillDefaultForm() {
   Object.assign(form, {
     username: '',
     phone: '',
@@ -54,9 +53,19 @@ function resetForm() {
   })
 }
 
+function resetForm() {
+  selectedId.value = null
+  fillDefaultForm()
+  nextTick(() => formRef.value?.clearValidate())
+}
+
+function openCreate() {
+  resetForm()
+  userDialogVisible.value = true
+}
+
 function edit(user) {
   selectedId.value = user.id
-  formRef.value?.clearValidate()
   Object.assign(form, {
     username: user.username || '',
     phone: user.phone || '',
@@ -66,6 +75,8 @@ function edit(user) {
     status: user.status || 'ENABLED',
     mustChangePassword: Boolean(user.mustChangePassword),
   })
+  userDialogVisible.value = true
+  nextTick(() => formRef.value?.clearValidate())
 }
 
 async function load() {
@@ -92,8 +103,9 @@ async function save() {
     } else {
       await api.createUser(payload)
       ElMessage.success('用户已创建')
-      resetForm()
     }
+    userDialogVisible.value = false
+    resetForm()
     await load()
   } catch (err) {
     ElMessage.error(err.message || '保存失败')
@@ -183,68 +195,70 @@ onMounted(load)
       <div class="toolbar-inline">
         <el-button :icon="Download" :loading="downloading" @click="downloadTemplate">下载模板</el-button>
         <el-button :icon="UploadFilled" @click="openImport">Excel 导入</el-button>
-        <el-button type="primary" :icon="Plus" @click="resetForm">新建用户</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新建用户</el-button>
       </div>
     </div>
 
-    <div class="content-grid">
-      <el-card shadow="never">
-        <template #header>
-          <div class="toolbar-inline" style="justify-content: space-between">
-            <strong>用户列表</strong>
-            <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-          </div>
-        </template>
+    <el-card shadow="never">
+      <template #header>
+        <div class="toolbar-inline" style="justify-content: space-between">
+          <strong>用户列表</strong>
+          <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+        </div>
+      </template>
 
-        <el-table v-loading="loading" :data="users" stripe height="620" empty-text="暂无用户">
-          <el-table-column prop="username" label="账号" min-width="130" />
-          <el-table-column label="姓名" min-width="120">
-            <template #default="{ row }">{{ row.realName || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="手机号" min-width="140">
-            <template #default="{ row }">{{ row.phone || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="角色" width="110">
-            <template #default="{ row }">
-              <el-tag :type="row.role === 'ADMIN' ? 'warning' : 'info'">
-                {{ row.role === 'ADMIN' ? '管理员' : '用户' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="110">
-            <template #default="{ row }">
-              <el-tag :type="row.status === 'ENABLED' ? 'success' : 'danger'">
-                {{ row.status === 'ENABLED' ? '启用' : '禁用' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="首次登录" width="110">
-            <template #default="{ row }">{{ row.mustChangePassword ? '需完善' : '已完成' }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="170" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
-              <el-button
-                size="small"
-                type="danger"
-                plain
-                :icon="SwitchButton"
-                :disabled="row.status === 'DISABLED'"
-                @click="disable(row)"
-              >
-                禁用
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
+      <el-table v-loading="loading" :data="users" stripe height="660" empty-text="暂无用户">
+        <el-table-column prop="username" label="账号" min-width="130" />
+        <el-table-column label="姓名" min-width="120">
+          <template #default="{ row }">{{ row.realName || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="手机号" min-width="140">
+          <template #default="{ row }">{{ row.phone || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="角色" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.role === 'ADMIN' ? 'warning' : 'info'">
+              {{ row.role === 'ADMIN' ? '管理员' : '用户' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'danger'">
+              {{ row.status === 'ENABLED' ? '启用' : '禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="首次登录" width="110">
+          <template #default="{ row }">{{ row.mustChangePassword ? '需完善' : '已完成' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="170" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :icon="SwitchButton"
+              :disabled="row.status === 'DISABLED'"
+              @click="disable(row)"
+            >
+              禁用
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
-      <el-card shadow="never">
-        <template #header>
-          <strong>{{ selectedUser ? '编辑用户' : '新建用户' }}</strong>
-        </template>
-
-        <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+    <el-dialog
+      v-model="userDialogVisible"
+      :title="selectedUser ? '编辑用户' : '新建用户'"
+      width="560px"
+      destroy-on-close
+      @closed="resetForm"
+    >
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+        <div class="question-dialog-grid two">
           <el-form-item label="账号" prop="username">
             <el-input v-model.trim="form.username" />
           </el-form-item>
@@ -269,13 +283,17 @@ onMounted(load)
               <el-option label="禁用" value="DISABLED" />
             </el-select>
           </el-form-item>
-          <el-form-item>
-            <el-checkbox v-model="form.mustChangePassword">首次登录需绑定手机号并修改密码</el-checkbox>
-          </el-form-item>
-          <el-button type="primary" :loading="saving" style="width: 100%" @click="save">保存</el-button>
-        </el-form>
-      </el-card>
-    </div>
+        </div>
+        <el-form-item>
+          <el-checkbox v-model="form.mustChangePassword">首次登录需绑定手机号并修改密码</el-checkbox>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="userDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="importVisible" title="Excel 导入用户" width="620px">
       <div class="file-box">
