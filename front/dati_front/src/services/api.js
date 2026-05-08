@@ -1,6 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-const TOKEN_KEY = 'dati_admin_token'
-const USER_KEY = 'dati_admin_user'
+const TOKEN_KEY = 'dati_auth_token'
+const USER_KEY = 'dati_auth_user'
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -111,6 +111,16 @@ export const api = {
   updateQuestion: (id, body) => request(`/api/admin/questions/${id}`, { method: 'PUT', body }),
 
   rankings: (limit = 50) => request(`/api/rankings?limit=${limit}`),
+  startSession: (body) => request('/api/practice/sessions', { method: 'POST', body }),
+  finishSession: (sessionId) => request(`/api/practice/sessions/${sessionId}/finish`, { method: 'PATCH' }),
+  submitAnswer: (body) => request('/api/practice/answers', { method: 'POST', body }),
+  wrongQuestions: (userId) => request(`/api/users/${userId}/wrong-questions`),
+  favoriteQuestions: (userId) => request(`/api/users/${userId}/favorite-questions`),
+  updateFavorite: (userId, questionId, favorite) =>
+    request(`/api/users/${userId}/questions/${questionId}/favorite`, {
+      method: 'PUT',
+      body: { favorite },
+    }),
   importQuestions: (formData) =>
     request('/api/admin/questions/import', { method: 'POST', body: formData }),
   importTemplate: (type = 'all') => request(`/api/admin/questions/import-template?type=${encodeURIComponent(type)}`),

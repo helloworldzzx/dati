@@ -7,8 +7,9 @@ const router = useRouter()
 const auth = useAuthStore()
 
 function handleExpired() {
+  const target = router.currentRoute.value.path.startsWith('/admin') ? '/admin/login' : '/answer/login'
   auth.logout()
-  router.push('/admin/login')
+  router.push(target)
 }
 
 onMounted(() => {
