@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
+import { Download, UploadFilled } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { api, downloadBlob } from '@/services/api'
 
 const file = ref(null)
 const loading = ref(false)
 const downloading = ref(false)
-const error = ref('')
 const result = ref(null)
 const templateType = ref('choice')
 
@@ -16,20 +17,30 @@ const templateNames = {
   all: 'question-import-template.xlsx',
 }
 
-function onFileChange(event) {
-  file.value = event.target.files?.[0] || null
+const templateOptions = [
+  { label: '选择题模板', value: 'choice' },
+  { label: '判断题模板', value: 'judge' },
+  { label: '分析题模板', value: 'analysis' },
+  { label: '全部模板', value: 'all' },
+]
+
+function beforeUpload(rawFile) {
+  file.value = rawFile
   result.value = null
-  error.value = ''
+  return false
+}
+
+function removeFile() {
+  file.value = null
 }
 
 async function downloadTemplate() {
   downloading.value = true
-  error.value = ''
   try {
     const blob = await api.importTemplate(templateType.value)
     downloadBlob(blob, templateNames[templateType.value])
   } catch (err) {
-    error.value = err.message || '模板下载失败'
+    ElMessage.error(err.message || '模板下载失败')
   } finally {
     downloading.value = false
   }
@@ -37,18 +48,18 @@ async function downloadTemplate() {
 
 async function upload() {
   if (!file.value) {
-    error.value = '请选择 Excel 文件'
+    ElMessage.warning('请选择 Excel 文件')
     return
   }
   loading.value = true
-  error.value = ''
   result.value = null
   try {
     const formData = new FormData()
     formData.append('file', file.value)
     result.value = await api.importQuestions(formData)
+    ElMessage.success('导入完成')
   } catch (err) {
-    error.value = err.message || '导入失败'
+    ElMessage.error(err.message || '导入失败')
   } finally {
     loading.value = false
   }
@@ -60,76 +71,79 @@ async function upload() {
     <div class="page-head">
       <div>
         <h2 class="page-title">批量导入</h2>
-        <p class="page-desc">使用 Excel 模板导入题目、选项、答案、解析和来源文件。</p>
+        <p class="page-desc">按题型下载模板，再上传 Excel 批量导入题目。</p>
       </div>
-      <div style="display: flex; gap: 10px">
-        <select v-model="templateType" class="select" style="width: 180px">
-          <option value="choice">选择题模板</option>
-          <option value="judge">判断题模板</option>
-          <option value="analysis">分析题模板</option>
-          <option value="all">全部模板</option>
-        </select>
-        <button class="btn" type="button" :disabled="downloading" @click="downloadTemplate">
-          {{ downloading ? '下载中' : '下载模板' }}
-        </button>
+      <div class="toolbar-inline">
+        <el-select v-model="templateType" style="width: 180px">
+          <el-option
+            v-for="item in templateOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+        <el-button :icon="Download" :loading="downloading" @click="downloadTemplate">下载模板</el-button>
       </div>
     </div>
 
-    <p v-if="error" class="error">{{ error }}</p>
+    <el-card shadow="never">
+      <template #header>
+        <strong>上传 Excel</strong>
+      </template>
 
-    <section class="card">
-      <div class="card-head">
-        <h3 class="card-title">上传 Excel</h3>
-      </div>
-      <div class="card-body">
-        <div class="file-box">
-          <input class="input" type="file" accept=".xlsx,.xls" @change="onFileChange" />
-          <div class="muted">
-            当前文件：{{ file?.name || '未选择' }}
-          </div>
-          <button class="btn btn-primary" type="button" :disabled="loading" @click="upload">
-            {{ loading ? '导入中' : '开始导入' }}
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section v-if="result" class="card" style="margin-top: 16px">
-      <div class="card-head">
-        <h3 class="card-title">导入结果</h3>
-        <span
-          :class="[
-            'badge',
-            result.status === 'SUCCESS'
-              ? 'badge-success'
-              : result.status === 'FAILED'
-                ? 'badge-danger'
-                : 'badge-warning',
-          ]"
+      <div class="file-box">
+        <el-upload
+          drag
+          action="#"
+          accept=".xlsx,.xls"
+          :auto-upload="false"
+          :limit="1"
+          :before-upload="beforeUpload"
+          :on-remove="removeFile"
         >
-          {{ result.status }}
-        </span>
+          <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+          <div class="el-upload__text">拖拽 Excel 到这里，或 <em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持 .xlsx / .xls，最大 10MB。</div>
+          </template>
+        </el-upload>
+
+        <el-alert v-if="file" type="info" :closable="false" show-icon>
+          当前文件：{{ file.name }}
+        </el-alert>
+
+        <el-button type="primary" :loading="loading" style="width: 180px" @click="upload">开始导入</el-button>
       </div>
-      <div class="card-body">
-        <div class="grid grid-4">
-          <article class="card stat-card">
-            <span>总行数</span>
-            <strong>{{ result.totalCount }}</strong>
-          </article>
-          <article class="card stat-card">
-            <span>成功</span>
-            <strong>{{ result.successCount }}</strong>
-          </article>
-          <article class="card stat-card">
-            <span>失败</span>
-            <strong>{{ result.failCount }}</strong>
-          </article>
-          <article class="card stat-card">
-            <span>批次 ID</span>
-            <strong>{{ result.id }}</strong>
-          </article>
+    </el-card>
+
+    <el-card v-if="result" class="card-gap" shadow="never">
+      <template #header>
+        <div class="toolbar-inline" style="justify-content: space-between">
+          <strong>导入结果</strong>
+          <el-tag
+            :type="
+              result.status === 'SUCCESS' ? 'success' : result.status === 'FAILED' ? 'danger' : 'warning'
+            "
+          >
+            {{ result.status }}
+          </el-tag>
         </div>
+      </template>
+
+      <div class="stat-grid">
+        <el-card shadow="never">
+          <el-statistic title="总行数" :value="result.totalCount" />
+        </el-card>
+        <el-card shadow="never">
+          <el-statistic title="成功" :value="result.successCount" />
+        </el-card>
+        <el-card shadow="never">
+          <el-statistic title="失败" :value="result.failCount" />
+        </el-card>
+        <el-card shadow="never">
+          <el-statistic title="批次 ID" :value="result.id" />
+        </el-card>
       </div>
-    </section>
+    </el-card>
   </div>
 </template>

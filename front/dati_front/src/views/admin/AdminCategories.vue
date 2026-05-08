@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Edit, Plus, Refresh, SwitchButton } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import CategoryTree from '@/components/admin/CategoryTree.vue'
 import { api } from '@/services/api'
 
@@ -8,8 +10,7 @@ const selectedId = ref(null)
 const expandedIds = ref(new Set())
 const loading = ref(false)
 const saving = ref(false)
-const error = ref('')
-const success = ref('')
+const formRef = ref()
 
 const form = reactive({
   parentId: '',
@@ -18,31 +19,26 @@ const form = reactive({
   status: 'ENABLED',
 })
 
+const rules = {
+  name: [{ required: true, message: '请输入分类名称', trigger: 'blur' }],
+}
+
 const selectedCategory = computed(() => categories.value.find((item) => item.id === selectedId.value))
+const treeNodes = computed(() => buildTree(categories.value))
 const parentOptions = computed(() =>
   flattenTree(treeNodes.value).filter((item) => item.level < 3 && item.id !== selectedId.value),
 )
 
-const treeNodes = computed(() => buildTree(categories.value))
-
 function buildTree(items) {
   const nodeMap = new Map()
   const roots = []
-
-  items.forEach((item) => {
-    nodeMap.set(item.id, { ...item, children: [] })
-  })
-
+  items.forEach((item) => nodeMap.set(item.id, { ...item, children: [] }))
   items.forEach((item) => {
     const node = nodeMap.get(item.id)
     const parent = item.parentId ? nodeMap.get(item.parentId) : null
-    if (parent) {
-      parent.children.push(node)
-    } else {
-      roots.push(node)
-    }
+    if (parent) parent.children.push(node)
+    else roots.push(node)
   })
-
   sortTree(roots)
   return roots
 }
@@ -66,16 +62,14 @@ function syncExpandedTree(nodes) {
 
 function toggleNode(node) {
   const next = new Set(expandedIds.value)
-  if (next.has(node.id)) {
-    next.delete(node.id)
-  } else {
-    next.add(node.id)
-  }
+  if (next.has(node.id)) next.delete(node.id)
+  else next.add(node.id)
   expandedIds.value = next
 }
 
 function resetForm() {
   selectedId.value = null
+  formRef.value?.clearValidate()
   Object.assign(form, {
     parentId: '',
     name: '',
@@ -86,6 +80,7 @@ function resetForm() {
 
 function edit(category) {
   selectedId.value = category.id
+  formRef.value?.clearValidate()
   Object.assign(form, {
     parentId: category.parentId || '',
     name: category.name || '',
@@ -108,49 +103,45 @@ function buildPayload() {
 
 async function load() {
   loading.value = true
-  error.value = ''
   try {
     categories.value = await api.categories()
     syncExpandedTree(treeNodes.value)
   } catch (err) {
-    error.value = err.message || '加载失败'
+    ElMessage.error(err.message || '加载失败')
   } finally {
     loading.value = false
   }
 }
 
 async function save() {
+  await formRef.value.validate()
   saving.value = true
-  error.value = ''
-  success.value = ''
   try {
     const payload = buildPayload()
     if (selectedId.value) {
       await api.updateCategory(selectedId.value, payload)
-      success.value = '分类已更新'
+      ElMessage.success('分类已更新')
     } else {
       await api.createCategory(payload)
-      success.value = '分类已创建'
+      ElMessage.success('分类已创建')
       resetForm()
     }
     await load()
   } catch (err) {
-    error.value = err.message || '保存失败'
+    ElMessage.error(err.message || '保存失败')
   } finally {
     saving.value = false
   }
 }
 
 async function disable(category) {
-  if (!window.confirm(`确认禁用分类 ${category.name}？`)) return
-  error.value = ''
-  success.value = ''
   try {
+    await ElMessageBox.confirm(`确认禁用分类 ${category.name}？`, '禁用分类', { type: 'warning' })
     await api.disableCategory(category.id)
-    success.value = '分类已禁用'
+    ElMessage.success('分类已禁用')
     await load()
   } catch (err) {
-    error.value = err.message || '操作失败'
+    if (err !== 'cancel') ElMessage.error(err.message || '操作失败')
   }
 }
 
@@ -164,74 +155,60 @@ onMounted(load)
         <h2 class="page-title">题库分类</h2>
         <p class="page-desc">维护 1-3 级题库目录。</p>
       </div>
-      <button class="btn" type="button" @click="resetForm">新建分类</button>
+      <el-button type="primary" :icon="Plus" @click="resetForm">新建分类</el-button>
     </div>
 
-    <p v-if="error" class="error">{{ error }}</p>
-    <p v-if="success" class="success">{{ success }}</p>
-
-    <div class="grid grid-2">
-      <section class="card">
-        <div class="card-head">
-          <h3 class="card-title">分类列表</h3>
-          <button class="btn" type="button" :disabled="loading" @click="load">刷新</button>
-        </div>
-        <div class="card-body">
-          <div class="tree-list">
-            <CategoryTree
-              v-if="treeNodes.length"
-              :nodes="treeNodes"
-              :expanded-ids="expandedIds"
-              @toggle="toggleNode"
-              @edit="edit"
-              @disable="disable"
-            />
-            <p v-if="!categories.length" class="muted">{{ loading ? '加载中' : '暂无分类' }}</p>
+    <div class="content-grid">
+      <el-card shadow="never" v-loading="loading">
+        <template #header>
+          <div class="toolbar-inline" style="justify-content: space-between">
+            <strong>分类列表</strong>
+            <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
           </div>
-        </div>
-      </section>
+        </template>
 
-      <section class="card">
-        <div class="card-head">
-          <h3 class="card-title">{{ selectedCategory ? '编辑分类' : '新建分类' }}</h3>
-        </div>
-        <div class="card-body">
-          <form class="form" @submit.prevent="save">
-            <div class="form-row">
-              <label>上级分类</label>
-              <select v-model="form.parentId" class="select">
-                <option value="">无，上设为一级分类</option>
-                <option v-for="item in parentOptions" :key="item.id" :value="item.id">
-                  {{ '　'.repeat(item.level - 1) }}{{ item.name }}
-                </option>
-              </select>
-            </div>
+        <CategoryTree
+          v-if="treeNodes.length"
+          :nodes="treeNodes"
+          :expanded-ids="expandedIds"
+          @toggle="toggleNode"
+          @edit="edit"
+          @disable="disable"
+        />
+        <el-empty v-else description="暂无分类" />
+      </el-card>
 
-            <div class="form-row">
-              <label>分类名称</label>
-              <input v-model.trim="form.name" class="input" required />
-            </div>
+      <el-card shadow="never">
+        <template #header>
+          <strong>{{ selectedCategory ? '编辑分类' : '新建分类' }}</strong>
+        </template>
 
-            <div class="form-grid">
-              <div class="form-row">
-                <label>排序</label>
-                <input v-model.number="form.sortNo" class="input" type="number" />
-              </div>
-              <div class="form-row">
-                <label>状态</label>
-                <select v-model="form.status" class="select">
-                  <option value="ENABLED">启用</option>
-                  <option value="DISABLED">禁用</option>
-                </select>
-              </div>
-            </div>
-
-            <button class="btn btn-primary" type="submit" :disabled="saving">
-              {{ saving ? '保存中' : '保存' }}
-            </button>
-          </form>
-        </div>
-      </section>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+          <el-form-item label="上级分类">
+            <el-select v-model="form.parentId" clearable placeholder="无，上设为一级分类" style="width: 100%">
+              <el-option
+                v-for="item in parentOptions"
+                :key="item.id"
+                :label="`${'　'.repeat(item.level - 1)}${item.name}`"
+                :value="item.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="分类名称" prop="name">
+            <el-input v-model.trim="form.name" />
+          </el-form-item>
+          <el-form-item label="排序">
+            <el-input-number v-model="form.sortNo" :min="0" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="form.status" style="width: 100%">
+              <el-option label="启用" value="ENABLED" />
+              <el-option label="禁用" value="DISABLED" />
+            </el-select>
+          </el-form-item>
+          <el-button type="primary" :loading="saving" style="width: 100%" @click="save">保存</el-button>
+        </el-form>
+      </el-card>
     </div>
   </div>
 </template>

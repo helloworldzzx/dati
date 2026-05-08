@@ -1,25 +1,33 @@
 <script setup>
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-
-const account = ref('admin')
-const password = ref('123456')
+const formRef = ref()
 const loading = ref(false)
-const error = ref('')
+
+const form = reactive({
+  account: 'admin',
+  password: '123456',
+})
+
+const rules = {
+  account: [{ required: true, message: '请输入账号或手机号', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+}
 
 async function submit() {
-  error.value = ''
+  await formRef.value.validate()
   loading.value = true
   try {
-    await auth.login(account.value, password.value)
+    await auth.login(form.account, form.password)
     if (!auth.isAdmin) {
       auth.logout()
-      error.value = '当前账号不是管理员'
+      ElMessage.error('当前账号不是管理员')
       return
     }
     if (auth.mustChangePassword) {
@@ -28,7 +36,7 @@ async function submit() {
     }
     await router.push(route.query.redirect || '/admin')
   } catch (err) {
-    error.value = err.message || '登录失败'
+    ElMessage.error(err.message || '登录失败')
   } finally {
     loading.value = false
   }
@@ -37,33 +45,29 @@ async function submit() {
 
 <template>
   <main class="auth-shell">
-    <section class="auth-panel">
+    <el-card class="auth-card" shadow="always">
       <h1 class="auth-title">答题系统后台</h1>
       <p class="auth-subtitle">管理员登录</p>
 
-      <form class="form" @submit.prevent="submit">
-        <div class="form-row">
-          <label for="account">账号或手机号</label>
-          <input id="account" v-model.trim="account" class="input" autocomplete="username" />
-        </div>
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="submit">
+        <el-form-item label="账号或手机号" prop="account">
+          <el-input v-model.trim="form.account" autocomplete="username" size="large" />
+        </el-form-item>
 
-        <div class="form-row">
-          <label for="password">密码</label>
-          <input
-            id="password"
-            v-model="password"
-            class="input"
-            type="password"
+        <el-form-item label="密码" prop="password">
+          <el-input
+            v-model="form.password"
             autocomplete="current-password"
+            show-password
+            size="large"
+            type="password"
           />
-        </div>
+        </el-form-item>
 
-        <p v-if="error" class="error">{{ error }}</p>
-
-        <button class="btn btn-primary" type="submit" :disabled="loading">
-          {{ loading ? '登录中' : '登录' }}
-        </button>
-      </form>
-    </section>
+        <el-button type="primary" size="large" :loading="loading" style="width: 100%" @click="submit">
+          登录
+        </el-button>
+      </el-form>
+    </el-card>
   </main>
 </template>

@@ -1,13 +1,14 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Edit, Plus, Refresh, SwitchButton } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/services/api'
 
 const users = ref([])
 const selectedId = ref(null)
 const loading = ref(false)
 const saving = ref(false)
-const error = ref('')
-const success = ref('')
+const formRef = ref()
 
 const form = reactive({
   username: '',
@@ -19,10 +20,24 @@ const form = reactive({
   mustChangePassword: true,
 })
 
+const rules = {
+  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+  password: [
+    {
+      validator: (_, value, callback) => {
+        if (!selectedId.value && !value) callback(new Error('请输入初始密码'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+}
+
 const selectedUser = computed(() => users.value.find((item) => item.id === selectedId.value))
 
 function resetForm() {
   selectedId.value = null
+  formRef.value?.clearValidate()
   Object.assign(form, {
     username: '',
     phone: '',
@@ -36,6 +51,7 @@ function resetForm() {
 
 function edit(user) {
   selectedId.value = user.id
+  formRef.value?.clearValidate()
   Object.assign(form, {
     username: user.username || '',
     phone: user.phone || '',
@@ -49,51 +65,46 @@ function edit(user) {
 
 async function load() {
   loading.value = true
-  error.value = ''
   try {
     users.value = await api.users()
   } catch (err) {
-    error.value = err.message || '加载失败'
+    ElMessage.error(err.message || '加载失败')
   } finally {
     loading.value = false
   }
 }
 
 async function save() {
+  await formRef.value.validate()
   saving.value = true
-  error.value = ''
-  success.value = ''
   try {
     const payload = { ...form }
-    if (!payload.password) {
-      delete payload.password
-    }
+    if (!payload.password) delete payload.password
+
     if (selectedId.value) {
       await api.updateUser(selectedId.value, payload)
-      success.value = '用户已更新'
+      ElMessage.success('用户已更新')
     } else {
       await api.createUser(payload)
-      success.value = '用户已创建'
+      ElMessage.success('用户已创建')
       resetForm()
     }
     await load()
   } catch (err) {
-    error.value = err.message || '保存失败'
+    ElMessage.error(err.message || '保存失败')
   } finally {
     saving.value = false
   }
 }
 
 async function disable(user) {
-  if (!window.confirm(`确认禁用账号 ${user.username}？`)) return
-  error.value = ''
-  success.value = ''
   try {
+    await ElMessageBox.confirm(`确认禁用账号 ${user.username}？`, '禁用用户', { type: 'warning' })
     await api.disableUser(user.id)
-    success.value = '用户已禁用'
+    ElMessage.success('用户已禁用')
     await load()
   } catch (err) {
-    error.value = err.message || '操作失败'
+    if (err !== 'cancel') ElMessage.error(err.message || '操作失败')
   }
 }
 
@@ -107,116 +118,93 @@ onMounted(load)
         <h2 class="page-title">用户管理</h2>
         <p class="page-desc">管理员统一创建用户账号并设置初始密码。</p>
       </div>
-      <button class="btn" type="button" @click="resetForm">新建用户</button>
+      <el-button type="primary" :icon="Plus" @click="resetForm">新建用户</el-button>
     </div>
 
-    <p v-if="error" class="error">{{ error }}</p>
-    <p v-if="success" class="success">{{ success }}</p>
+    <div class="content-grid">
+      <el-card shadow="never">
+        <template #header>
+          <div class="toolbar-inline" style="justify-content: space-between">
+            <strong>用户列表</strong>
+            <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+          </div>
+        </template>
 
-    <div class="grid grid-2">
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>账号</th>
-              <th>姓名</th>
-              <th>手机号</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>首次登录</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="user in users" :key="user.id">
-              <td>{{ user.username }}</td>
-              <td>{{ user.realName || '-' }}</td>
-              <td>{{ user.phone || '-' }}</td>
-              <td>
-                <span class="badge">{{ user.role }}</span>
-              </td>
-              <td>
-                <span :class="['badge', user.status === 'ENABLED' ? 'badge-success' : 'badge-danger']">
-                  {{ user.status }}
-                </span>
-              </td>
-              <td>{{ user.mustChangePassword ? '需完善' : '已完成' }}</td>
-              <td>
-                <div class="table-actions">
-                  <button class="btn" type="button" @click="edit(user)">编辑</button>
-                  <button
-                    class="btn btn-danger"
-                    type="button"
-                    :disabled="user.status === 'DISABLED'"
-                    @click="disable(user)"
-                  >
-                    禁用
-                  </button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!users.length">
-              <td colspan="7" class="muted">{{ loading ? '加载中' : '暂无用户' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <el-table v-loading="loading" :data="users" stripe height="620" empty-text="暂无用户">
+          <el-table-column prop="username" label="账号" min-width="130" />
+          <el-table-column label="姓名" min-width="120">
+            <template #default="{ row }">{{ row.realName || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="手机号" min-width="140">
+            <template #default="{ row }">{{ row.phone || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="角色" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.role === 'ADMIN' ? 'warning' : 'info'">{{ row.role }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'ENABLED' ? 'success' : 'danger'">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="首次登录" width="110">
+            <template #default="{ row }">{{ row.mustChangePassword ? '需完善' : '已完成' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="170" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                :icon="SwitchButton"
+                :disabled="row.status === 'DISABLED'"
+                @click="disable(row)"
+              >
+                禁用
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
 
-      <section class="card">
-        <div class="card-head">
-          <h3 class="card-title">{{ selectedUser ? '编辑用户' : '新建用户' }}</h3>
-        </div>
-        <div class="card-body">
-          <form class="form" @submit.prevent="save">
-            <div class="form-grid">
-              <div class="form-row">
-                <label>账号</label>
-                <input v-model.trim="form.username" class="input" required />
-              </div>
-              <div class="form-row">
-                <label>姓名</label>
-                <input v-model.trim="form.realName" class="input" />
-              </div>
-            </div>
+      <el-card shadow="never">
+        <template #header>
+          <strong>{{ selectedUser ? '编辑用户' : '新建用户' }}</strong>
+        </template>
 
-            <div class="form-row">
-              <label>手机号</label>
-              <input v-model.trim="form.phone" class="input" />
-            </div>
-
-            <div class="form-row">
-              <label>{{ selectedUser ? '新密码' : '初始密码' }}</label>
-              <input v-model="form.password" class="input" type="password" :required="!selectedUser" />
-            </div>
-
-            <div class="form-grid">
-              <div class="form-row">
-                <label>角色</label>
-                <select v-model="form.role" class="select">
-                  <option value="USER">用户</option>
-                  <option value="ADMIN">管理员</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <label>状态</label>
-                <select v-model="form.status" class="select">
-                  <option value="ENABLED">启用</option>
-                  <option value="DISABLED">禁用</option>
-                </select>
-              </div>
-            </div>
-
-            <label class="tree-row" style="justify-content: flex-start; gap: 8px">
-              <input v-model="form.mustChangePassword" type="checkbox" />
-              首次登录需绑定手机号并修改密码
-            </label>
-
-            <button class="btn btn-primary" type="submit" :disabled="saving">
-              {{ saving ? '保存中' : '保存' }}
-            </button>
-          </form>
-        </div>
-      </section>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+          <el-form-item label="账号" prop="username">
+            <el-input v-model.trim="form.username" />
+          </el-form-item>
+          <el-form-item label="姓名">
+            <el-input v-model.trim="form.realName" />
+          </el-form-item>
+          <el-form-item label="手机号">
+            <el-input v-model.trim="form.phone" />
+          </el-form-item>
+          <el-form-item :label="selectedUser ? '新密码' : '初始密码'" prop="password">
+            <el-input v-model="form.password" show-password type="password" />
+          </el-form-item>
+          <el-form-item label="角色">
+            <el-select v-model="form.role" style="width: 100%">
+              <el-option label="用户" value="USER" />
+              <el-option label="管理员" value="ADMIN" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="form.status" style="width: 100%">
+              <el-option label="启用" value="ENABLED" />
+              <el-option label="禁用" value="DISABLED" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-checkbox v-model="form.mustChangePassword">首次登录需绑定手机号并修改密码</el-checkbox>
+          </el-form-item>
+          <el-button type="primary" :loading="saving" style="width: 100%" @click="save">保存</el-button>
+        </el-form>
+      </el-card>
     </div>
   </div>
 </template>

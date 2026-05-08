@@ -1,4 +1,6 @@
 <script setup>
+import { Edit, SwitchButton } from '@element-plus/icons-vue'
+
 defineProps({
   nodes: {
     type: Array,
@@ -44,8 +46,10 @@ function isExpanded(expandedIds, node) {
         </button>
 
         <div class="table-actions">
-          <button class="btn" type="button" @click="emit('edit', node)">编辑</button>
-          <button class="btn btn-danger" type="button" @click="emit('disable', node)">禁用</button>
+          <el-button size="small" :icon="Edit" @click="emit('edit', node)">编辑</el-button>
+          <el-button size="small" type="danger" plain :icon="SwitchButton" @click="emit('disable', node)">
+            禁用
+          </el-button>
         </div>
       </div>
 

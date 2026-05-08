@@ -1,6 +1,16 @@
 <script setup>
 import { computed } from 'vue'
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
+import {
+  Collection,
+  DataAnalysis,
+  Document,
+  Files,
+  House,
+  Rank,
+  Upload,
+  User,
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -8,20 +18,24 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const navItems = [
-  { path: '/admin', label: '工作台', exact: true },
-  { path: '/admin/users', label: '用户管理' },
-  { path: '/admin/categories', label: '题库分类' },
-  { path: '/admin/questions', label: '题目管理' },
-  { path: '/admin/import', label: '批量导入' },
-  { path: '/admin/rankings', label: '排行榜' },
+  { path: '/admin', label: '工作台', icon: House },
+  { path: '/admin/users', label: '用户管理', icon: User },
+  { path: '/admin/categories', label: '题库分类', icon: Collection },
+  { path: '/admin/questions', label: '题目管理', icon: Document },
+  { path: '/admin/import', label: '批量导入', icon: Upload },
+  { path: '/admin/rankings', label: '排行榜', icon: Rank },
 ]
 
-const pageTitle = computed(() => {
-  const item = navItems.find((nav) =>
-    nav.exact ? route.path === nav.path : route.path.startsWith(nav.path),
-  )
-  return item?.label || '后台'
+const activeMenu = computed(() => {
+  const matched = navItems.find((item) => item.path !== '/admin' && route.path.startsWith(item.path))
+  return matched?.path || '/admin'
 })
+
+const pageTitle = computed(() => navItems.find((item) => item.path === activeMenu.value)?.label || '后台')
+
+function navigate(path) {
+  router.push(path)
+}
 
 function logout() {
   auth.logout()
@@ -30,42 +44,42 @@ function logout() {
 </script>
 
 <template>
-  <div class="admin-shell">
-    <aside class="admin-sidebar">
+  <el-container class="admin-layout">
+    <el-aside width="232px" class="admin-aside">
       <div class="admin-brand">
         <h1>答题系统</h1>
         <p>管理后台</p>
       </div>
 
-      <nav class="admin-nav">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          :class="{ 'router-link-active': item.exact && route.path === item.path }"
-        >
-          {{ item.label }}
-        </RouterLink>
-      </nav>
+      <el-menu class="admin-menu" :default-active="activeMenu" @select="navigate">
+        <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </el-menu-item>
+      </el-menu>
 
       <div class="admin-sidebar-footer">电脑端后台</div>
-    </aside>
+    </el-aside>
 
-    <main class="admin-main">
-      <header class="admin-topbar">
-        <div class="admin-topbar-title">{{ pageTitle }}</div>
+    <el-container>
+      <el-header class="admin-header">
+        <div class="admin-header-title">
+          <el-icon style="vertical-align: -2px"><DataAnalysis /></el-icon>
+          {{ pageTitle }}
+        </div>
         <div class="admin-user">
           <div class="admin-user-name">
             <strong>{{ auth.user?.realName || auth.user?.username }}</strong>
             <span>{{ auth.user?.role }}</span>
           </div>
-          <button class="btn" type="button" @click="logout">退出</button>
+          <el-avatar :size="34" :icon="User" />
+          <el-button :icon="Files" @click="logout">退出</el-button>
         </div>
-      </header>
+      </el-header>
 
-      <section class="admin-content">
+      <el-main class="admin-main">
         <RouterView />
-      </section>
-    </main>
-  </div>
+      </el-main>
+    </el-container>
+  </el-container>
 </template>
