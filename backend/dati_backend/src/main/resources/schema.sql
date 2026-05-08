@@ -107,6 +107,34 @@ CREATE TABLE IF NOT EXISTS practice_session (
   CONSTRAINT chk_practice_session_mode CHECK (mode IN ('PRACTICE', 'WRONG_BOOK', 'FAVORITE'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS user_practice_progress (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  scope_key VARCHAR(100) NOT NULL,
+  mode VARCHAR(20) NOT NULL DEFAULT 'PRACTICE',
+  category_id BIGINT UNSIGNED NULL,
+  current_index INT UNSIGNED NOT NULL DEFAULT 0,
+  current_question_id BIGINT UNSIGNED NULL,
+  question_ids_json JSON NOT NULL,
+  draft_answers_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_user_practice_progress_scope (user_id, scope_key),
+  KEY idx_user_practice_progress_category (category_id),
+  KEY idx_user_practice_progress_question (current_question_id),
+  CONSTRAINT fk_user_practice_progress_user
+    FOREIGN KEY (user_id) REFERENCES sys_user (id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_user_practice_progress_category
+    FOREIGN KEY (category_id) REFERENCES question_category (id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_user_practice_progress_question
+    FOREIGN KEY (current_question_id) REFERENCES question (id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT chk_user_practice_progress_mode CHECK (mode IN ('PRACTICE', 'WRONG_BOOK', 'FAVORITE'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS answer_record (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   session_id BIGINT UNSIGNED NULL,

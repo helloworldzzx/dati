@@ -144,6 +144,12 @@ export const api = {
   submitAnswer: (body) => request('/api/practice/answers', { method: 'POST', body }),
   wrongQuestions: (userId) => request(`/api/users/${userId}/wrong-questions`),
   favoriteQuestions: (userId) => request(`/api/users/${userId}/favorite-questions`),
+  practiceProgress: (userId, params = {}) => request(`/api/users/${userId}/practice-progress?${query(params)}`),
+  savePracticeProgress: (userId, body) =>
+    request(`/api/users/${userId}/practice-progress`, {
+      method: 'PUT',
+      body,
+    }),
   updateFavorite: (userId, questionId, favorite) =>
     request(`/api/users/${userId}/questions/${questionId}/favorite`, {
       method: 'PUT',

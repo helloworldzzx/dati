@@ -47,7 +47,7 @@ public class QuestionService {
 
     public List<Question> listQuestions(Long categoryId, String type, String status, Integer page, Integer size) {
         int safePage = page == null || page < 1 ? 1 : page;
-        int safeSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        int safeSize = size == null || size < 1 ? 20 : Math.min(size, 2000);
         return questionMapper.list(categoryId, trimToNull(type), trimToNull(status), safeSize, (safePage - 1) * safeSize);
     }
 

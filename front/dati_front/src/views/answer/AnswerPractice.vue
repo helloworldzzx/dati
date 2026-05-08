@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Document, Star, StarFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -14,12 +14,13 @@ const loading = ref(false)
 const questions = ref([])
 const currentIndex = ref(0)
 const currentDetail = ref(null)
-const sessionId = ref(null)
 const selectedAnswers = ref([])
 const analysisAnswer = ref('')
 const favoriteIds = ref(new Set())
 
 const records = reactive({})
+const drafts = reactive({})
+let saveTimer = null
 
 const mode = computed(() => route.query.mode || 'practice')
 const categoryId = computed(() => (route.query.categoryId ? Number(route.query.categoryId) : null))
@@ -44,7 +45,14 @@ const submitted = computed(() => Boolean(currentRecord.value?.submitted))
 const userAnswerText = computed(() => currentRecord.value?.userAnswer || selectedAnswers.value.join(','))
 const isFavorite = computed(() => currentQuestion.value && favoriteIds.value.has(currentQuestion.value.id))
 
-watch(currentIndex, loadCurrentDetail)
+watch(currentIndex, async () => {
+  await loadCurrentDetail()
+  await saveProgressNow()
+})
+
+watch(analysisAnswer, () => {
+  if (currentQuestion.value?.type === 'ANALYSIS' && !submitted.value) saveDraft()
+})
 
 function typeLabel(type) {
   return {
@@ -61,6 +69,73 @@ function normalizeMode() {
   return 'PRACTICE'
 }
 
+function replaceReactiveObject(target, source) {
+  Object.keys(target).forEach((key) => delete target[key])
+  Object.assign(target, source || {})
+}
+
+async function loadSavedProgress() {
+  return api.practiceProgress(auth.user.id, {
+    mode: normalizeMode(),
+    categoryId: categoryId.value,
+  })
+}
+
+function restoreProgress(progress) {
+  replaceReactiveObject(records, {})
+  replaceReactiveObject(drafts, progress?.drafts)
+
+  const questionIds = questions.value.map((item) => item.id)
+  let nextIndex = 0
+  const savedQuestionIndex = questionIds.indexOf(progress?.currentQuestionId)
+  if (savedQuestionIndex >= 0) {
+    nextIndex = savedQuestionIndex
+  } else if (Number.isInteger(progress?.currentIndex)) {
+    nextIndex = Math.min(Math.max(progress.currentIndex, 0), questions.value.length - 1)
+  }
+  currentIndex.value = nextIndex
+}
+
+function progressPayload() {
+  const current = questions.value[currentIndex.value]
+  return {
+    mode: normalizeMode(),
+    categoryId: categoryId.value,
+    currentIndex: currentIndex.value,
+    currentQuestionId: current?.id || null,
+    questionIds: questions.value.map((item) => item.id),
+    drafts: { ...drafts },
+  }
+}
+
+async function saveProgressNow() {
+  if (!auth.user?.id || !questions.value.length) return
+  if (saveTimer) {
+    window.clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  try {
+    await api.savePracticeProgress(auth.user.id, progressPayload())
+  } catch {
+    // 自动保存失败时不打断答题，下一次切题或提交会继续尝试保存。
+  }
+}
+
+function scheduleSaveProgress() {
+  if (saveTimer) window.clearTimeout(saveTimer)
+  saveTimer = window.setTimeout(() => {
+    saveProgressNow()
+  }, 600)
+}
+
+function saveDraft() {
+  if (!currentQuestion.value || submitted.value) return
+  const answer = currentAnswer()
+  if (answer) drafts[currentQuestion.value.id] = { userAnswer: answer }
+  else delete drafts[currentQuestion.value.id]
+  scheduleSaveProgress()
+}
+
 async function loadQuestions() {
   loading.value = true
   try {
@@ -74,20 +149,15 @@ async function loadQuestions() {
         categoryId: categoryId.value,
         status: 'ENABLED',
         page: 1,
-        size: 200,
+        size: 2000,
       })
     }
 
     if (questions.value.length) {
-      const session = await api.startSession({
-        userId: auth.user.id,
-        categoryId: categoryId.value,
-        mode: normalizeMode(),
-        totalCount: questions.value.length,
-      })
-      sessionId.value = session.id
-      currentIndex.value = 0
+      const progress = await loadSavedProgress()
+      restoreProgress(progress)
       await loadCurrentDetail()
+      await saveProgressNow()
     }
   } catch (err) {
     ElMessage.error(err.message || '加载题目失败')
@@ -110,9 +180,17 @@ async function loadCurrentDetail() {
     else ids.delete(item.id)
     favoriteIds.value = ids
 
-    const record = records[item.id]
-    selectedAnswers.value = record?.userAnswer ? record.userAnswer.split(',').filter(Boolean) : []
-    analysisAnswer.value = record?.userAnswer || ''
+    if (!records[item.id] && stat?.lastAnswer) {
+      records[item.id] = {
+        submitted: true,
+        userAnswer: stat.lastAnswer,
+        correct: stat.lastCorrect,
+      }
+    }
+
+    const savedAnswer = records[item.id]?.userAnswer || drafts[item.id]?.userAnswer || ''
+    selectedAnswers.value = savedAnswer ? savedAnswer.split(',').filter(Boolean) : []
+    analysisAnswer.value = savedAnswer
   } catch (err) {
     ElMessage.error(err.message || '加载题目详情失败')
   }
@@ -127,6 +205,7 @@ function toggleOption(option) {
     } else {
       selectedAnswers.value = [...selectedAnswers.value, key].sort()
     }
+    saveDraft()
     return
   }
   selectedAnswers.value = [key]
@@ -154,6 +233,7 @@ function splitAnswer(value) {
 }
 
 function currentAnswer() {
+  if (!currentQuestion.value) return ''
   if (currentQuestion.value.type === 'ANALYSIS') return analysisAnswer.value.trim()
   return selectedAnswers.value.join(',')
 }
@@ -174,7 +254,7 @@ async function submit() {
 
   try {
     const record = await api.submitAnswer({
-      sessionId: sessionId.value,
+      sessionId: null,
       userId: auth.user.id,
       questionId: currentQuestion.value.id,
       userAnswer: answer,
@@ -185,6 +265,8 @@ async function submit() {
       userAnswer: answer,
       correct: record.correct,
     }
+    delete drafts[currentQuestion.value.id]
+    await saveProgressNow()
   } catch (err) {
     ElMessage.error(err.message || '提交失败')
   }
@@ -212,20 +294,9 @@ function previous() {
 function next() {
   if (currentIndex.value < questions.value.length - 1) {
     currentIndex.value += 1
-  } else {
-    finish()
+    return
   }
-}
-
-async function finish() {
-  if (sessionId.value) {
-    try {
-      await api.finishSession(sessionId.value)
-    } catch {
-      // 结束练习失败不阻塞返回首页。
-    }
-  }
-  router.push('/answer')
+  ElMessage.info('已经是最后一题')
 }
 
 function globalAccuracy(question) {
@@ -239,6 +310,9 @@ function personalAccuracy(record) {
 }
 
 onMounted(loadQuestions)
+onBeforeUnmount(() => {
+  saveProgressNow()
+})
 </script>
 
 <template>
@@ -351,11 +425,10 @@ onMounted(loadQuestions)
           </div>
         </section>
 
-        <footer class="question-bottom">
+        <footer class="question-bottom two">
           <el-button :icon="ArrowLeft" :disabled="currentIndex === 0" @click="previous">上一题</el-button>
-          <el-button type="primary" plain @click="finish">结束</el-button>
-          <el-button type="primary" @click="next">
-            {{ currentIndex === questions.length - 1 ? '完成' : '下一题' }}
+          <el-button type="primary" :disabled="currentIndex === questions.length - 1" @click="next">
+            下一题
             <el-icon class="el-icon--right"><ArrowRight /></el-icon>
           </el-button>
         </footer>

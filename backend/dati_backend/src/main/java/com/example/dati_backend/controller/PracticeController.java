@@ -2,6 +2,8 @@ package com.example.dati_backend.controller;
 
 import com.example.dati_backend.common.ApiResponse;
 import com.example.dati_backend.dto.FavoriteRequest;
+import com.example.dati_backend.dto.PracticeProgressRequest;
+import com.example.dati_backend.dto.PracticeProgressResponse;
 import com.example.dati_backend.dto.PracticeSessionRequest;
 import com.example.dati_backend.dto.SubmitAnswerRequest;
 import com.example.dati_backend.entity.AnswerRecord;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -50,6 +53,23 @@ public class PracticeController {
     @GetMapping("/api/users/{userId}/favorite-questions")
     public ApiResponse<List<Question>> favoriteQuestions(@PathVariable Long userId) {
         return ApiResponse.ok(questionService.listFavoriteQuestions(userId));
+    }
+
+    @GetMapping("/api/users/{userId}/practice-progress")
+    public ApiResponse<PracticeProgressResponse> getProgress(
+            @PathVariable Long userId,
+            @RequestParam(required = false) String mode,
+            @RequestParam(required = false) Long categoryId
+    ) {
+        return ApiResponse.ok(practiceService.getProgress(userId, mode, categoryId));
+    }
+
+    @PutMapping("/api/users/{userId}/practice-progress")
+    public ApiResponse<PracticeProgressResponse> saveProgress(
+            @PathVariable Long userId,
+            @RequestBody PracticeProgressRequest request
+    ) {
+        return ApiResponse.ok(practiceService.saveProgress(userId, request));
     }
 
     @PutMapping("/api/users/{userId}/questions/{questionId}/favorite")

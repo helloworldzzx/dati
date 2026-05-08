@@ -1,19 +1,29 @@
 package com.example.dati_backend.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.dati_backend.dto.FavoriteRequest;
+import com.example.dati_backend.dto.PracticeProgressDraft;
+import com.example.dati_backend.dto.PracticeProgressRequest;
+import com.example.dati_backend.dto.PracticeProgressResponse;
 import com.example.dati_backend.dto.PracticeSessionRequest;
 import com.example.dati_backend.dto.SubmitAnswerRequest;
 import com.example.dati_backend.entity.AnswerRecord;
 import com.example.dati_backend.entity.PracticeSession;
 import com.example.dati_backend.entity.Question;
+import com.example.dati_backend.entity.UserPracticeProgress;
 import com.example.dati_backend.entity.UserQuestionStat;
 import com.example.dati_backend.mapper.AnswerRecordMapper;
 import com.example.dati_backend.mapper.PracticeSessionMapper;
 import com.example.dati_backend.mapper.QuestionMapper;
 import com.example.dati_backend.mapper.UserAnswerStatMapper;
+import com.example.dati_backend.mapper.UserPracticeProgressMapper;
 import com.example.dati_backend.mapper.UserQuestionStatMapper;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +38,8 @@ public class PracticeService {
     private final QuestionMapper questionMapper;
     private final UserQuestionStatMapper userQuestionStatMapper;
     private final UserAnswerStatMapper userAnswerStatMapper;
+    private final UserPracticeProgressMapper userPracticeProgressMapper;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public PracticeSession startSession(PracticeSessionRequest request) {
@@ -96,6 +108,44 @@ public class PracticeService {
         sessionMapper.finish(sessionId);
     }
 
+    public PracticeProgressResponse getProgress(Long userId, String mode, Long categoryId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        String normalizedMode = normalizeMode(mode);
+        Long normalizedCategoryId = normalizeCategoryId(categoryId);
+        UserPracticeProgress progress = userPracticeProgressMapper.findByScope(
+                userId,
+                buildScopeKey(normalizedMode, normalizedCategoryId)
+        );
+        return progress == null ? null : toProgressResponse(progress);
+    }
+
+    @Transactional
+    public PracticeProgressResponse saveProgress(Long userId, PracticeProgressRequest request) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("Progress request is required");
+        }
+        String normalizedMode = normalizeMode(request.mode());
+        Long normalizedCategoryId = normalizeCategoryId(request.categoryId());
+
+        UserPracticeProgress progress = new UserPracticeProgress();
+        progress.setUserId(userId);
+        progress.setScopeKey(buildScopeKey(normalizedMode, normalizedCategoryId));
+        progress.setMode(normalizedMode);
+        progress.setCategoryId(normalizedCategoryId);
+        progress.setCurrentIndex(Math.max(request.currentIndex() == null ? 0 : request.currentIndex(), 0));
+        progress.setCurrentQuestionId(request.currentQuestionId());
+        progress.setQuestionIdsJson(toJson(request.questionIds() == null ? List.of() : request.questionIds()));
+        progress.setDraftAnswersJson(toJson(request.drafts() == null ? Map.of() : request.drafts()));
+
+        userPracticeProgressMapper.upsert(progress);
+        return getProgress(userId, normalizedMode, normalizedCategoryId);
+    }
+
     private Boolean judgeAnswer(Question question, String userAnswer) {
         if ("ANALYSIS".equalsIgnoreCase(question.getType()) || !StringUtils.hasText(question.getCorrectAnswer())) {
             return null;
@@ -130,5 +180,65 @@ public class PracticeService {
             case "FALSE", "F", "0", "NO", "N", "\u9519\u8BEF", "\u9519" -> "FALSE";
             default -> null;
         };
+    }
+
+    private String normalizeMode(String mode) {
+        if (!StringUtils.hasText(mode)) {
+            return "PRACTICE";
+        }
+        String normalized = mode.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "WRONG", "WRONG_BOOK" -> "WRONG_BOOK";
+            case "FAVORITE" -> "FAVORITE";
+            default -> "PRACTICE";
+        };
+    }
+
+    private Long normalizeCategoryId(Long categoryId) {
+        return categoryId == null || categoryId <= 0 ? null : categoryId;
+    }
+
+    private String buildScopeKey(String mode, Long categoryId) {
+        if ("PRACTICE".equals(mode) && categoryId != null) {
+            return mode + ":CATEGORY:" + categoryId;
+        }
+        return mode + ":ALL";
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException("Invalid progress data");
+        }
+    }
+
+    private PracticeProgressResponse toProgressResponse(UserPracticeProgress progress) {
+        return new PracticeProgressResponse(
+                progress.getId(),
+                progress.getUserId(),
+                progress.getMode(),
+                progress.getCategoryId(),
+                progress.getCurrentIndex(),
+                progress.getCurrentQuestionId(),
+                fromJson(progress.getQuestionIdsJson(), new TypeReference<List<Long>>() {}, List.of()),
+                fromJson(
+                        progress.getDraftAnswersJson(),
+                        new TypeReference<Map<String, PracticeProgressDraft>>() {},
+                        Map.of()
+                ),
+                progress.getUpdatedAt()
+        );
+    }
+
+    private <T> T fromJson(String json, TypeReference<T> typeReference, T defaultValue) {
+        if (!StringUtils.hasText(json)) {
+            return defaultValue;
+        }
+        try {
+            return objectMapper.readValue(json, typeReference);
+        } catch (JsonProcessingException exception) {
+            return defaultValue;
+        }
     }
 }
