@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import CategoryTree from '@/components/admin/CategoryTree.vue'
 import { api } from '@/services/api'
 
 const categories = ref([])
 const selectedId = ref(null)
+const expandedIds = ref(new Set())
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -17,23 +19,59 @@ const form = reactive({
 })
 
 const selectedCategory = computed(() => categories.value.find((item) => item.id === selectedId.value))
-const parentOptions = computed(() => categories.value.filter((item) => item.level < 3 && item.id !== selectedId.value))
-
-const orderedCategories = computed(() =>
-  [...categories.value].sort((left, right) => {
-    if (left.level !== right.level) return left.level - right.level
-    if ((left.parentId || 0) !== (right.parentId || 0)) return (left.parentId || 0) - (right.parentId || 0)
-    return left.sortNo - right.sortNo || left.id - right.id
-  }),
+const parentOptions = computed(() =>
+  flattenTree(treeNodes.value).filter((item) => item.level < 3 && item.id !== selectedId.value),
 )
 
-function indent(category) {
-  return `${(category.level - 1) * 24}px`
+const treeNodes = computed(() => buildTree(categories.value))
+
+function buildTree(items) {
+  const nodeMap = new Map()
+  const roots = []
+
+  items.forEach((item) => {
+    nodeMap.set(item.id, { ...item, children: [] })
+  })
+
+  items.forEach((item) => {
+    const node = nodeMap.get(item.id)
+    const parent = item.parentId ? nodeMap.get(item.parentId) : null
+    if (parent) {
+      parent.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+
+  sortTree(roots)
+  return roots
 }
 
-function parentName(category) {
-  if (!category.parentId) return '-'
-  return categories.value.find((item) => item.id === category.parentId)?.name || '-'
+function sortTree(nodes) {
+  nodes.sort((left, right) => (left.sortNo || 0) - (right.sortNo || 0) || left.id - right.id)
+  nodes.forEach((node) => sortTree(node.children))
+}
+
+function flattenTree(nodes) {
+  return nodes.flatMap((node) => [node, ...flattenTree(node.children)])
+}
+
+function syncExpandedTree(nodes) {
+  const next = new Set(expandedIds.value)
+  flattenTree(nodes)
+    .filter((node) => node.children.length > 0)
+    .forEach((node) => next.add(node.id))
+  expandedIds.value = next
+}
+
+function toggleNode(node) {
+  const next = new Set(expandedIds.value)
+  if (next.has(node.id)) {
+    next.delete(node.id)
+  } else {
+    next.add(node.id)
+  }
+  expandedIds.value = next
 }
 
 function resetForm() {
@@ -73,6 +111,7 @@ async function load() {
   error.value = ''
   try {
     categories.value = await api.categories()
+    syncExpandedTree(treeNodes.value)
   } catch (err) {
     error.value = err.message || '加载失败'
   } finally {
@@ -139,20 +178,14 @@ onMounted(load)
         </div>
         <div class="card-body">
           <div class="tree-list">
-            <div v-for="category in orderedCategories" :key="category.id" class="tree-row">
-              <div class="tree-row-main" :style="{ paddingLeft: indent(category) }">
-                <span class="badge">L{{ category.level }}</span>
-                <strong>{{ category.name }}</strong>
-                <span class="muted">上级：{{ parentName(category) }}</span>
-                <span :class="['badge', category.status === 'ENABLED' ? 'badge-success' : 'badge-danger']">
-                  {{ category.status }}
-                </span>
-              </div>
-              <div class="table-actions">
-                <button class="btn" type="button" @click="edit(category)">编辑</button>
-                <button class="btn btn-danger" type="button" @click="disable(category)">禁用</button>
-              </div>
-            </div>
+            <CategoryTree
+              v-if="treeNodes.length"
+              :nodes="treeNodes"
+              :expanded-ids="expandedIds"
+              @toggle="toggleNode"
+              @edit="edit"
+              @disable="disable"
+            />
             <p v-if="!categories.length" class="muted">{{ loading ? '加载中' : '暂无分类' }}</p>
           </div>
         </div>

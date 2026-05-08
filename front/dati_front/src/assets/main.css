@@ -460,6 +460,76 @@ a {
   gap: 8px;
 }
 
+.category-tree {
+  display: grid;
+  gap: 8px;
+}
+
+.category-tree-item {
+  display: grid;
+  gap: 8px;
+}
+
+.category-tree-row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.category-tree-row:hover {
+  border-color: #b6c3d4;
+  background: #fbfdff;
+}
+
+.category-tree-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.category-tree-main strong {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-tree-children {
+  display: grid;
+  gap: 8px;
+  margin-left: 22px;
+  padding-left: 16px;
+  border-left: 2px solid #dbe3ef;
+}
+
+.tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #334155;
+  font-weight: 800;
+}
+
+.tree-toggle:disabled {
+  background: transparent;
+  opacity: 1;
+}
+
 .tree-row {
   display: flex;
   align-items: center;
