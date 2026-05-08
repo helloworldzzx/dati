@@ -6,6 +6,7 @@ public record UserRequest(
         String password,
         String realName,
         String role,
-        String status
+        String status,
+        Boolean mustChangePassword
 ) {
 }
