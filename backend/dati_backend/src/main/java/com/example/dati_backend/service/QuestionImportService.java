@@ -178,7 +178,13 @@ public class QuestionImportService {
         }
 
         String correctAnswer = normalizeCorrectAnswer(type, cellString(row, COL_CORRECT_ANSWER));
+        if (!"ANALYSIS".equals(type) && !StringUtils.hasText(correctAnswer)) {
+            throw new IllegalArgumentException("Correct answer is required");
+        }
         List<QuestionOptionRequest> options = parseOptions(row, type, correctAnswer);
+        if (("SINGLE".equals(type) || "MULTIPLE".equals(type)) && options.size() < 2) {
+            throw new IllegalArgumentException("Objective questions require at least two options");
+        }
         QuestionRequest request = new QuestionRequest(
                 categoryId,
                 type,
@@ -278,6 +284,9 @@ public class QuestionImportService {
     private String normalizeCorrectAnswer(String type, String value) {
         if (!StringUtils.hasText(value)) {
             return null;
+        }
+        if ("ANALYSIS".equals(type)) {
+            return value.trim();
         }
         String answer = value.trim().toUpperCase(Locale.ROOT);
         if (!"JUDGE".equals(type)) {
