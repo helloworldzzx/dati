@@ -50,6 +50,10 @@ const currentRecord = computed(() => (currentQuestion.value ? records[currentQue
 const submitted = computed(() => Boolean(currentRecord.value?.submitted))
 const userAnswerText = computed(() => currentRecord.value?.userAnswer || selectedAnswers.value.join(','))
 const isFavorite = computed(() => currentQuestion.value && favoriteIds.value.has(currentQuestion.value.id))
+const showManualSubmit = computed(() => {
+  const type = currentQuestion.value?.type
+  return (type === 'MULTIPLE' || type === 'ANALYSIS') && !submitted.value
+})
 
 watch(currentIndex, async () => {
   await loadCurrentDetail()
@@ -327,7 +331,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="mobile-shell">
-    <div class="mobile-page">
+    <div class="mobile-page practice-page">
       <template v-if="currentQuestion">
         <div class="question-topbar">
           <div class="question-tools">
@@ -358,15 +362,6 @@ onBeforeUnmount(() => {
               :disabled="submitted"
               placeholder="请输入你的答案"
             />
-            <el-button
-              v-if="!submitted"
-              type="primary"
-              size="large"
-              style="width: 100%; margin-top: 14px"
-              @click="submit"
-            >
-              提交答案
-            </el-button>
           </template>
 
           <div v-else class="option-mobile-list">
@@ -385,15 +380,6 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <el-button
-            v-if="currentQuestion.type === 'MULTIPLE' && !submitted"
-            type="primary"
-            size="large"
-            style="width: 100%; margin-top: 22px"
-            @click="submit"
-          >
-            提交答案
-          </el-button>
         </section>
 
         <section v-if="submitted" class="answer-section">
@@ -435,12 +421,23 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <footer class="question-bottom two">
-          <el-button :icon="ArrowLeft" :disabled="currentIndex === 0" @click="previous">上一题</el-button>
-          <el-button type="primary" :disabled="currentIndex === questions.length - 1" @click="next">
-            下一题
-            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+        <footer class="question-bottom">
+          <el-button
+            v-if="showManualSubmit"
+            class="question-submit-button"
+            type="primary"
+            size="large"
+            @click="submit"
+          >
+            提交答案
           </el-button>
+          <div class="question-nav-row">
+            <el-button :icon="ArrowLeft" :disabled="currentIndex === 0" @click="previous">上一题</el-button>
+            <el-button type="primary" :disabled="currentIndex === questions.length - 1" @click="next">
+              下一题
+              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+            </el-button>
+          </div>
         </footer>
       </template>
 
