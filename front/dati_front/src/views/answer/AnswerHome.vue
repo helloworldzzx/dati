@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Tickets } from '@element-plus/icons-vue'
+import { ArrowRight, Document, Folder, FolderOpened, Tickets } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import AnswerTabBar from '@/components/AnswerTabBar.vue'
 import { api } from '@/services/api'
@@ -11,11 +11,35 @@ const router = useRouter()
 const auth = useAuthStore()
 const categories = ref([])
 const loading = ref(false)
+const treeProps = {
+  children: 'children',
+  label: 'name',
+}
 
-const flatCategories = computed(() => flatten(categories.value))
+function hasChildren(category) {
+  return Boolean(category?.children?.length)
+}
 
-function flatten(nodes) {
-  return nodes.flatMap((node) => [node, ...flatten(node.children || [])])
+function canPractice(category) {
+  return !hasChildren(category) && category?.status === 'ENABLED'
+}
+
+function statusText(category) {
+  if (hasChildren(category)) return `${category.children.length} 个子分类`
+  return category.status === 'ENABLED' ? '可开始练习' : '已禁用'
+}
+
+function toggleNode(node) {
+  if (node.expanded) node.collapse()
+  else node.expand()
+}
+
+function handleNodeClick(node, category) {
+  if (hasChildren(category)) {
+    toggleNode(node)
+    return
+  }
+  if (canPractice(category)) startPractice(category)
 }
 
 async function load() {
@@ -54,7 +78,7 @@ onMounted(load)
       <section class="answer-content with-tabbar">
         <div class="answer-hero">
           <h1>开始练习</h1>
-          <p>选择题库分类，或直接从全部题目开始练习。</p>
+          <p>选择末级题库开始练习，文件夹分类可点击展开。</p>
         </div>
 
         <div class="answer-grid">
@@ -71,23 +95,52 @@ onMounted(load)
         </div>
 
         <h3 class="answer-section-heading">题库</h3>
-        <el-skeleton v-if="loading" :rows="4" animated />
-        <div v-else class="category-mobile-list">
-          <button
-            v-for="category in flatCategories"
-            :key="category.id"
-            class="answer-action"
-            type="button"
-            @click="startPractice(category)"
+        <el-skeleton v-if="loading" :rows="5" animated />
+        <div v-else class="category-tree-card">
+          <el-tree
+            v-if="categories.length"
+            class="category-folder-tree"
+            :data="categories"
+            :props="treeProps"
+            node-key="id"
+            :indent="18"
+            :expand-on-click-node="false"
+            :highlight-current="false"
           >
-            <span class="answer-action-icon">L{{ category.level }}</span>
-            <span>
-              <strong>{{ '　'.repeat(category.level - 1) }}{{ category.name }}</strong>
-              <span>{{ category.status === 'ENABLED' ? '已启用' : '已禁用' }}</span>
-            </span>
-            <el-icon><ArrowRight /></el-icon>
-          </button>
-          <el-empty v-if="!flatCategories.length" description="暂无分类" />
+            <template #default="{ node, data }">
+              <div
+                :class="['category-tree-node', hasChildren(data) ? 'folder' : 'leaf']"
+                role="button"
+                tabindex="0"
+                @click.stop="handleNodeClick(node, data)"
+                @keydown.enter.prevent="handleNodeClick(node, data)"
+              >
+                <span class="category-tree-icon">
+                  <el-icon>
+                    <FolderOpened v-if="hasChildren(data) && node.expanded" />
+                    <Folder v-else-if="hasChildren(data)" />
+                    <Document v-else />
+                  </el-icon>
+                </span>
+                <span class="category-tree-main">
+                  <strong>{{ data.name }}</strong>
+                  <span>{{ statusText(data) }}</span>
+                </span>
+                <button
+                  v-if="canPractice(data)"
+                  class="category-practice-button"
+                  type="button"
+                  @click.stop="startPractice(data)"
+                >
+                  练习
+                </button>
+                <el-icon v-else-if="hasChildren(data)" :class="['category-tree-arrow', node.expanded ? 'open' : '']">
+                  <ArrowRight />
+                </el-icon>
+              </div>
+            </template>
+          </el-tree>
+          <el-empty v-else description="暂无分类" />
         </div>
       </section>
 
