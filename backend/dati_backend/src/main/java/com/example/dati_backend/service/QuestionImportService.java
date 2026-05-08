@@ -13,10 +13,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -31,17 +37,9 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class QuestionImportService {
-    private static final int COL_CATEGORY_LEVEL_1 = 0;
-    private static final int COL_CATEGORY_LEVEL_2 = 1;
-    private static final int COL_CATEGORY_LEVEL_3 = 2;
-    private static final int COL_TYPE = 3;
-    private static final int COL_TITLE = 4;
-    private static final int COL_OPTION_A = 5;
-    private static final int COL_OPTION_E = 9;
-    private static final int COL_CORRECT_ANSWER = 10;
-    private static final int COL_ANALYSIS = 11;
-    private static final int COL_SOURCE_FILE = 12;
-    private static final int COL_STATUS = 13;
+    private static final Pattern OPTION_BLOCK_PATTERN = Pattern.compile(
+            "(?s)(?:^|\\n)\\s*([A-Z])\\s*[\\.．、\\)）:：]\\s*(.*?)(?=\\n\\s*[A-Z]\\s*[\\.．、\\)）:：]|\\z)"
+    );
 
     private final QuestionImportBatchMapper batchMapper;
     private final QuestionImportErrorMapper errorMapper;
@@ -73,27 +71,45 @@ public class QuestionImportService {
         int totalCount = 0;
         int successCount = 0;
         int failCount = 0;
+        boolean foundImportSheet = false;
 
         try (InputStream inputStream = file.getInputStream();
              Workbook workbook = WorkbookFactory.create(inputStream)) {
-            Sheet sheet = workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
-            if (sheet == null) {
+            if (workbook.getNumberOfSheets() == 0) {
                 throw new IllegalArgumentException("Excel sheet is empty");
             }
 
-            for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-                Row row = sheet.getRow(rowIndex);
-                if (isEmptyRow(row)) {
+            for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
+                Sheet sheet = workbook.getSheetAt(sheetIndex);
+                HeaderMap header = readHeader(sheet);
+                if (!header.isImportSheet()) {
                     continue;
                 }
-                totalCount++;
-                try {
-                    importRow(row, importedBy);
-                    successCount++;
-                } catch (Exception exception) {
-                    failCount++;
-                    saveError(batch.getId(), rowIndex + 1, exception.getMessage(), rawRowJson(row));
+                foundImportSheet = true;
+
+                for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                    Row row = sheet.getRow(rowIndex);
+                    if (isEmptyRow(row, header)) {
+                        continue;
+                    }
+                    totalCount++;
+                    try {
+                        importRow(row, header, importedBy);
+                        successCount++;
+                    } catch (Exception exception) {
+                        failCount++;
+                        saveError(
+                                batch.getId(),
+                                rowIndex + 1,
+                                sheet.getSheetName() + ": " + exception.getMessage(),
+                                rawRowJson(row, header)
+                        );
+                    }
                 }
+            }
+
+            if (!foundImportSheet) {
+                throw new IllegalArgumentException("No import sheet found");
             }
         } catch (Exception exception) {
             failCount++;
@@ -111,47 +127,10 @@ public class QuestionImportService {
     public byte[] buildTemplate() {
         try (Workbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet("questions");
-            Row header = sheet.createRow(0);
-            List<String> headers = List.of(
-                    "\u4E00\u7EA7\u5206\u7C7B",
-                    "\u4E8C\u7EA7\u5206\u7C7B",
-                    "\u4E09\u7EA7\u5206\u7C7B",
-                    "\u9898\u578B",
-                    "\u9898\u5E72",
-                    "A",
-                    "B",
-                    "C",
-                    "D",
-                    "E",
-                    "\u6B63\u786E\u7B54\u6848",
-                    "\u89E3\u6790",
-                    "\u6765\u6E90\u6587\u4EF6",
-                    "\u72B6\u6001"
-            );
-            for (int i = 0; i < headers.size(); i++) {
-                header.createCell(i).setCellValue(headers.get(i));
-            }
-
-            Row example = sheet.createRow(1);
-            example.createCell(0).setCellValue("\u601D\u60F3\u653F\u6CBB\u6559\u80B2");
-            example.createCell(1).setCellValue("\u9AD8\u6821\u8F85\u5BFC\u5458");
-            example.createCell(2).setCellValue("\u961F\u4F0D\u5EFA\u8BBE");
-            example.createCell(3).setCellValue("\u5355\u9009");
-            example.createCell(4).setCellValue("\u8F85\u5BFC\u5458\u5E94\u5F53\u52AA\u529B\u6210\u4E3A\u5B66\u751F\u6210\u957F\u6210\u624D\u7684\u548C\u5065\u5EB7\u751F\u6D3B\u7684\u77E5\u5FC3\u670B\u53CB\u3002");
-            example.createCell(5).setCellValue("\u7231\u56FD\u5B88\u6CD5");
-            example.createCell(6).setCellValue("\u656C\u4E1A\u7231\u751F");
-            example.createCell(7).setCellValue("\u80B2\u4EBA\u4E3A\u672C");
-            example.createCell(8).setCellValue("\u7EC8\u8EAB\u5B66\u4E60");
-            example.createCell(9).setCellValue("\u4E3A\u4EBA\u5E08\u8868");
-            example.createCell(10).setCellValue("B");
-            example.createCell(11).setCellValue("\u6B63\u786E\u7B54\u6848\u4E3A B\u3002");
-            example.createCell(12).setCellValue("\u666E\u901A\u9AD8\u7B49\u5B66\u6821\u8F85\u5BFC\u5458\u961F\u4F0D\u5EFA\u8BBE\u89C4\u5B9A");
-            example.createCell(13).setCellValue("ENABLED");
-
-            for (int i = 0; i < headers.size(); i++) {
-                sheet.autoSizeColumn(i);
-            }
+            createGuideSheet(workbook);
+            createChoiceSheet(workbook);
+            createJudgeSheet(workbook);
+            createAnalysisSheet(workbook);
             workbook.write(outputStream);
             return outputStream.toByteArray();
         } catch (Exception exception) {
@@ -169,43 +148,52 @@ public class QuestionImportService {
         errorMapper.insert(error);
     }
 
-    private void importRow(Row row, Long importedBy) {
-        Long categoryId = resolveCategoryId(row);
-        String type = normalizeQuestionType(cellString(row, COL_TYPE));
-        String title = cellString(row, COL_TITLE);
+    private void importRow(Row row, HeaderMap header, Long importedBy) {
+        Long categoryId = resolveCategoryId(row, header);
+        String type = normalizeQuestionType(cellString(row, header.typeColumn));
+        String title = cellString(row, header.titleColumn);
         if (!StringUtils.hasText(title)) {
             throw new IllegalArgumentException("Question title is required");
         }
 
-        String correctAnswer = normalizeCorrectAnswer(type, cellString(row, COL_CORRECT_ANSWER));
+        String correctAnswer = normalizeCorrectAnswer(type, cellString(row, header.correctAnswerColumn));
         if (!"ANALYSIS".equals(type) && !StringUtils.hasText(correctAnswer)) {
             throw new IllegalArgumentException("Correct answer is required");
         }
-        List<QuestionOptionRequest> options = parseOptions(row, type, correctAnswer);
+
+        List<QuestionOptionRequest> options = parseOptions(row, header, type, correctAnswer);
         if (("SINGLE".equals(type) || "MULTIPLE".equals(type)) && options.size() < 2) {
-            throw new IllegalArgumentException("Objective questions require at least two options");
+            throw new IllegalArgumentException("Choice questions require at least two options");
         }
+
         QuestionRequest request = new QuestionRequest(
                 categoryId,
                 type,
                 title,
                 correctAnswer,
-                cellString(row, COL_ANALYSIS),
-                cellString(row, COL_SOURCE_FILE),
-                StringUtils.hasText(cellString(row, COL_STATUS)) ? cellString(row, COL_STATUS).toUpperCase(Locale.ROOT) : "ENABLED",
+                cellString(row, header.analysisColumn),
+                cellString(row, header.sourceFileColumn),
+                StringUtils.hasText(cellString(row, header.statusColumn))
+                        ? cellString(row, header.statusColumn).toUpperCase(Locale.ROOT)
+                        : "ENABLED",
                 importedBy,
                 options
         );
         questionService.createQuestion(request);
     }
 
-    private Long resolveCategoryId(Row row) {
+    private Long resolveCategoryId(Row row, HeaderMap header) {
         Long parentId = null;
         Long categoryId = null;
         boolean metBlank = false;
+        List<Integer> categoryColumns = List.of(
+                header.categoryLevel1Column,
+                header.categoryLevel2Column,
+                header.categoryLevel3Column
+        );
 
-        for (int i = COL_CATEGORY_LEVEL_1; i <= COL_CATEGORY_LEVEL_3; i++) {
-            String name = cellString(row, i);
+        for (int index = 0; index < categoryColumns.size(); index++) {
+            String name = cellString(row, categoryColumns.get(index));
             if (!StringUtils.hasText(name)) {
                 metBlank = true;
                 continue;
@@ -213,8 +201,7 @@ public class QuestionImportService {
             if (metBlank) {
                 throw new IllegalArgumentException("Category levels cannot be skipped");
             }
-            int level = i + 1;
-            QuestionCategory category = getOrCreateCategory(parentId, name, level);
+            QuestionCategory category = getOrCreateCategory(parentId, name, index + 1);
             parentId = category.getId();
             categoryId = category.getId();
         }
@@ -241,30 +228,63 @@ public class QuestionImportService {
         return category;
     }
 
-    private List<QuestionOptionRequest> parseOptions(Row row, String type, String correctAnswer) {
+    private List<QuestionOptionRequest> parseOptions(Row row, HeaderMap header, String type, String correctAnswer) {
         if ("ANALYSIS".equals(type)) {
             return List.of();
         }
-        if ("JUDGE".equals(type) && noOptionCells(row)) {
+        if ("JUDGE".equals(type)) {
             return List.of(
                     new QuestionOptionRequest("TRUE", "\u6B63\u786E", "TRUE".equals(correctAnswer), 0),
                     new QuestionOptionRequest("FALSE", "\u9519\u8BEF", "FALSE".equals(correctAnswer), 1)
             );
         }
 
+        String mergedOptions = cellString(row, header.optionsColumn);
+        if (StringUtils.hasText(mergedOptions)) {
+            return parseMergedOptions(mergedOptions, correctAnswer);
+        }
+
         List<String> correctKeys = splitAnswer(correctAnswer);
+        return header.optionColumns.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    String content = cellString(row, entry.getValue());
+                    if (!StringUtils.hasText(content)) {
+                        return null;
+                    }
+                    int sortNo = entry.getKey().charAt(0) - 'A';
+                    return new QuestionOptionRequest(
+                            entry.getKey(),
+                            content,
+                            correctKeys.contains(entry.getKey()),
+                            sortNo
+                    );
+                })
+                .filter(option -> option != null)
+                .toList();
+    }
+
+    private List<QuestionOptionRequest> parseMergedOptions(String optionsText, String correctAnswer) {
+        List<String> correctKeys = splitAnswer(correctAnswer);
+        String normalized = optionsText
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replaceAll("\\s+([A-Z])\\s*([\\.．、\\)）:：])", "\n$1$2")
+                .trim();
+
+        Matcher matcher = OPTION_BLOCK_PATTERN.matcher(normalized);
         List<QuestionOptionRequest> options = new ArrayList<>();
-        for (int col = COL_OPTION_A; col <= COL_OPTION_E; col++) {
-            String content = cellString(row, col);
+        while (matcher.find()) {
+            String optionKey = matcher.group(1);
+            String content = matcher.group(2).trim();
             if (!StringUtils.hasText(content)) {
                 continue;
             }
-            String optionKey = String.valueOf((char) ('A' + (col - COL_OPTION_A)));
             options.add(new QuestionOptionRequest(
                     optionKey,
                     content,
                     correctKeys.contains(optionKey),
-                    col - COL_OPTION_A
+                    optionKey.charAt(0) - 'A'
             ));
         }
         return options;
@@ -310,20 +330,62 @@ public class QuestionImportService {
                 .toList();
     }
 
-    private boolean noOptionCells(Row row) {
-        for (int col = COL_OPTION_A; col <= COL_OPTION_E; col++) {
-            if (StringUtils.hasText(cellString(row, col))) {
-                return false;
+    private HeaderMap readHeader(Sheet sheet) {
+        Row row = sheet.getRow(0);
+        HeaderMap header = new HeaderMap();
+        if (row == null) {
+            return header;
+        }
+
+        for (int col = 0; col < row.getLastCellNum(); col++) {
+            String label = normalizeHeader(cellString(row, col));
+            if (!StringUtils.hasText(label)) {
+                continue;
+            }
+            header.lastColumn = Math.max(header.lastColumn, col);
+            switch (label) {
+                case "\u4E00\u7EA7\u5206\u7C7B", "\u4E00\u7EA7\u76EE\u5F55" -> header.categoryLevel1Column = col;
+                case "\u4E8C\u7EA7\u5206\u7C7B", "\u4E8C\u7EA7\u76EE\u5F55" -> header.categoryLevel2Column = col;
+                case "\u4E09\u7EA7\u5206\u7C7B", "\u4E09\u7EA7\u76EE\u5F55" -> header.categoryLevel3Column = col;
+                case "\u9898\u578B" -> header.typeColumn = col;
+                case "\u9898\u5E72", "\u9898\u76EE" -> header.titleColumn = col;
+                case "\u9009\u9879", "\u9009\u9879\u5185\u5BB9", "\u9009\u62E9\u9898\u9009\u9879" -> header.optionsColumn = col;
+                case "\u6B63\u786E\u7B54\u6848", "\u53C2\u8003\u7B54\u6848", "\u7B54\u6848" -> header.correctAnswerColumn = col;
+                case "\u89E3\u6790", "\u7B54\u6848\u89E3\u6790" -> header.analysisColumn = col;
+                case "\u6765\u6E90\u6587\u4EF6", "\u6765\u6E90" -> header.sourceFileColumn = col;
+                case "\u72B6\u6001" -> header.statusColumn = col;
+                default -> readOptionColumn(header, label, col);
             }
         }
-        return true;
+        return header;
     }
 
-    private boolean isEmptyRow(Row row) {
+    private void readOptionColumn(HeaderMap header, String label, int col) {
+        String optionKey = null;
+        if (label.matches("[A-Z]")) {
+            optionKey = label;
+        } else if (label.matches("\u9009\u9879[A-Z]")) {
+            optionKey = label.substring(2);
+        } else if (label.matches("OPTION[A-Z]")) {
+            optionKey = label.substring("OPTION".length());
+        }
+
+        if (optionKey != null) {
+            header.optionColumns.put(optionKey, col);
+        }
+    }
+
+    private String normalizeHeader(String value) {
+        return StringUtils.hasText(value)
+                ? value.trim().replaceAll("\\s+", "").toUpperCase(Locale.ROOT)
+                : "";
+    }
+
+    private boolean isEmptyRow(Row row, HeaderMap header) {
         if (row == null) {
             return true;
         }
-        for (int col = COL_CATEGORY_LEVEL_1; col <= COL_STATUS; col++) {
+        for (int col = 0; col <= header.lastColumn; col++) {
             if (StringUtils.hasText(cellString(row, col))) {
                 return false;
             }
@@ -331,10 +393,10 @@ public class QuestionImportService {
         return true;
     }
 
-    private String rawRowJson(Row row) {
+    private String rawRowJson(Row row, HeaderMap header) {
         try {
             List<String> values = new ArrayList<>();
-            for (int col = COL_CATEGORY_LEVEL_1; col <= COL_STATUS; col++) {
+            for (int col = 0; col <= header.lastColumn; col++) {
                 values.add(cellString(row, col));
             }
             return objectMapper.writeValueAsString(values);
@@ -343,8 +405,8 @@ public class QuestionImportService {
         }
     }
 
-    private String cellString(Row row, int col) {
-        if (row == null) {
+    private String cellString(Row row, Integer col) {
+        if (row == null || col == null || col < 0) {
             return "";
         }
         Cell cell = row.getCell(col);
@@ -359,5 +421,166 @@ public class QuestionImportService {
             return "PARTIAL_SUCCESS";
         }
         return "FAILED";
+    }
+
+    private void createGuideSheet(Workbook workbook) {
+        Sheet sheet = workbook.createSheet("\u5BFC\u5165\u8BF4\u660E");
+        List<String> lines = List.of(
+                "\u8BF7\u6309\u9898\u578B\u5206\u522B\u5728\u3010\u9009\u62E9\u9898\u3011\u3010\u5224\u65AD\u9898\u3011\u3010\u5206\u6790\u9898\u3011\u5DE5\u4F5C\u8868\u586B\u5199\u3002",
+                "\u9009\u62E9\u9898\u7684\u9009\u9879\u653E\u5728\u4E00\u4E2A\u5355\u5143\u683C\uFF0C\u6BCF\u4E2A\u9009\u9879\u4EE5 A. / B. / C. \u5F00\u5934\uFF0C\u9009\u9879\u6570\u91CF\u4E0D\u9650\u3002",
+                "\u591A\u9009\u9898\u6B63\u786E\u7B54\u6848\u7528 A,C,F \u8FD9\u79CD\u683C\u5F0F\uFF0C\u4E5F\u652F\u6301 A\u3001C\u3001F\u3002",
+                "\u5224\u65AD\u9898\u6B63\u786E\u7B54\u6848\u53EF\u586B\uFF1A\u6B63\u786E\u3001\u9519\u8BEF\u3001\u5BF9\u3001\u9519\u3001TRUE\u3001FALSE\u3002",
+                "\u7CFB\u7EDF\u4F1A\u6309\u4E00\u7EA7/\u4E8C\u7EA7/\u4E09\u7EA7\u5206\u7C7B\u81EA\u52A8\u521B\u5EFA\u76EE\u5F55\u3002"
+        );
+        for (int i = 0; i < lines.size(); i++) {
+            sheet.createRow(i).createCell(0).setCellValue(lines.get(i));
+        }
+        sheet.setColumnWidth(0, 12000);
+    }
+
+    private void createChoiceSheet(Workbook workbook) {
+        Sheet sheet = workbook.createSheet("\u9009\u62E9\u9898");
+        writeHeader(sheet, List.of(
+                "\u4E00\u7EA7\u5206\u7C7B",
+                "\u4E8C\u7EA7\u5206\u7C7B",
+                "\u4E09\u7EA7\u5206\u7C7B",
+                "\u9898\u578B",
+                "\u9898\u5E72",
+                "\u9009\u9879",
+                "\u6B63\u786E\u7B54\u6848",
+                "\u89E3\u6790",
+                "\u6765\u6E90\u6587\u4EF6",
+                "\u72B6\u6001"
+        ));
+        writeRow(sheet, 1, List.of(
+                "\u601D\u60F3\u653F\u6CBB\u6559\u80B2",
+                "\u9AD8\u6821\u8F85\u5BFC\u5458",
+                "\u961F\u4F0D\u5EFA\u8BBE",
+                "\u5355\u9009",
+                "\u8F85\u5BFC\u5458\u5E94\u5F53\u52AA\u529B\u6210\u4E3A\u5B66\u751F\u6210\u957F\u6210\u624D\u7684\u548C\u5065\u5EB7\u751F\u6D3B\u7684\u77E5\u5FC3\u670B\u53CB\u3002",
+                "A. \u7231\u56FD\u5B88\u6CD5\nB. \u656C\u4E1A\u7231\u751F\nC. \u80B2\u4EBA\u4E3A\u672C\nD. \u7EC8\u8EAB\u5B66\u4E60\nE. \u4E3A\u4EBA\u5E08\u8868",
+                "B",
+                "\u6B63\u786E\u7B54\u6848\u4E3A B\u3002",
+                "\u666E\u901A\u9AD8\u7B49\u5B66\u6821\u8F85\u5BFC\u5458\u961F\u4F0D\u5EFA\u8BBE\u89C4\u5B9A",
+                "ENABLED"
+        ));
+        writeRow(sheet, 2, List.of(
+                "\u601D\u60F3\u653F\u6CBB\u6559\u80B2",
+                "\u7EFC\u5408\u77E5\u8BC6",
+                "",
+                "\u591A\u9009",
+                "\u4EE5\u4E0B\u5C5E\u4E8E\u793A\u4F8B\u591A\u9009\u9879\u7684\u6709\u54EA\u4E9B\uFF1F",
+                "A. \u9009\u9879\u4E00\nB. \u9009\u9879\u4E8C\nC. \u9009\u9879\u4E09\nD. \u9009\u9879\u56DB\nE. \u9009\u9879\u4E94\nF. \u9009\u9879\u516D",
+                "A,C,F",
+                "\u591A\u9009\u7B54\u6848\u7528\u82F1\u6587\u9017\u53F7\u5206\u9694\u3002",
+                "\u793A\u4F8B\u6765\u6E90",
+                "ENABLED"
+        ));
+        finishSheet(sheet);
+    }
+
+    private void createJudgeSheet(Workbook workbook) {
+        Sheet sheet = workbook.createSheet("\u5224\u65AD\u9898");
+        writeHeader(sheet, List.of(
+                "\u4E00\u7EA7\u5206\u7C7B",
+                "\u4E8C\u7EA7\u5206\u7C7B",
+                "\u4E09\u7EA7\u5206\u7C7B",
+                "\u9898\u578B",
+                "\u9898\u5E72",
+                "\u6B63\u786E\u7B54\u6848",
+                "\u89E3\u6790",
+                "\u6765\u6E90\u6587\u4EF6",
+                "\u72B6\u6001"
+        ));
+        writeRow(sheet, 1, List.of(
+                "\u601D\u60F3\u653F\u6CBB\u6559\u80B2",
+                "\u5224\u65AD\u793A\u4F8B",
+                "",
+                "\u5224\u65AD",
+                "\u8FD9\u662F\u4E00\u9053\u5224\u65AD\u9898\u793A\u4F8B\u3002",
+                "\u6B63\u786E",
+                "\u53EF\u586B\u6B63\u786E/\u9519\u8BEF\u6216 TRUE/FALSE\u3002",
+                "\u793A\u4F8B\u6765\u6E90",
+                "ENABLED"
+        ));
+        finishSheet(sheet);
+    }
+
+    private void createAnalysisSheet(Workbook workbook) {
+        Sheet sheet = workbook.createSheet("\u5206\u6790\u9898");
+        writeHeader(sheet, List.of(
+                "\u4E00\u7EA7\u5206\u7C7B",
+                "\u4E8C\u7EA7\u5206\u7C7B",
+                "\u4E09\u7EA7\u5206\u7C7B",
+                "\u9898\u578B",
+                "\u9898\u5E72",
+                "\u53C2\u8003\u7B54\u6848",
+                "\u89E3\u6790",
+                "\u6765\u6E90\u6587\u4EF6",
+                "\u72B6\u6001"
+        ));
+        writeRow(sheet, 1, List.of(
+                "\u601D\u60F3\u653F\u6CBB\u6559\u80B2",
+                "\u5206\u6790\u793A\u4F8B",
+                "",
+                "\u5206\u6790",
+                "\u8BF7\u7ED3\u5408\u6750\u6599\u8FDB\u884C\u5206\u6790\u3002",
+                "\u8FD9\u91CC\u586B\u5199\u53C2\u8003\u7B54\u6848\u3002",
+                "\u8FD9\u91CC\u586B\u5199\u7B54\u9898\u601D\u8DEF\u6216\u8BC4\u5206\u8981\u70B9\u3002",
+                "\u793A\u4F8B\u6765\u6E90",
+                "ENABLED"
+        ));
+        finishSheet(sheet);
+    }
+
+    private void writeHeader(Sheet sheet, List<String> headers) {
+        Row row = sheet.createRow(0);
+        for (int i = 0; i < headers.size(); i++) {
+            row.createCell(i).setCellValue(headers.get(i));
+        }
+    }
+
+    private void writeRow(Sheet sheet, int rowIndex, List<String> values) {
+        Row row = sheet.createRow(rowIndex);
+        for (int i = 0; i < values.size(); i++) {
+            Cell cell = row.createCell(i);
+            cell.setCellValue(values.get(i));
+            if (values.get(i).contains("\n")) {
+                CellStyle style = sheet.getWorkbook().createCellStyle();
+                style.setWrapText(true);
+                cell.setCellStyle(style);
+                row.setHeightInPoints(90);
+            }
+        }
+    }
+
+    private void finishSheet(Sheet sheet) {
+        for (int i = 0; i < 10; i++) {
+            sheet.autoSizeColumn(i);
+            sheet.setColumnWidth(i, Math.min(Math.max(sheet.getColumnWidth(i), 2800), 12000));
+        }
+        sheet.createFreezePane(0, 1);
+    }
+
+    private static class HeaderMap {
+        private Integer categoryLevel1Column;
+        private Integer categoryLevel2Column;
+        private Integer categoryLevel3Column;
+        private Integer typeColumn;
+        private Integer titleColumn;
+        private Integer optionsColumn;
+        private Integer correctAnswerColumn;
+        private Integer analysisColumn;
+        private Integer sourceFileColumn;
+        private Integer statusColumn;
+        private int lastColumn;
+        private final Map<String, Integer> optionColumns = new LinkedHashMap<>();
+
+        private boolean isImportSheet() {
+            return categoryLevel1Column != null
+                    && typeColumn != null
+                    && titleColumn != null
+                    && correctAnswerColumn != null;
+        }
     }
 }
