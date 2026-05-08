@@ -113,5 +113,5 @@ export const api = {
   rankings: (limit = 50) => request(`/api/rankings?limit=${limit}`),
   importQuestions: (formData) =>
     request('/api/admin/questions/import', { method: 'POST', body: formData }),
-  importTemplate: () => request('/api/admin/questions/import-template'),
+  importTemplate: (type = 'all') => request(`/api/admin/questions/import-template?type=${encodeURIComponent(type)}`),
 }

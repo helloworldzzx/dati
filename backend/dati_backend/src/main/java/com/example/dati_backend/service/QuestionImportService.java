@@ -13,7 +13,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -124,18 +123,36 @@ public class QuestionImportService {
         return batchMapper.findById(batch.getId());
     }
 
-    public byte[] buildTemplate() {
+    public byte[] buildTemplate(String templateType) {
         try (Workbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             createGuideSheet(workbook);
-            createChoiceSheet(workbook);
-            createJudgeSheet(workbook);
-            createAnalysisSheet(workbook);
+            switch (normalizeTemplateType(templateType)) {
+                case "choice" -> createChoiceSheet(workbook);
+                case "judge" -> createJudgeSheet(workbook);
+                case "analysis" -> createAnalysisSheet(workbook);
+                case "all" -> {
+                    createChoiceSheet(workbook);
+                    createJudgeSheet(workbook);
+                    createAnalysisSheet(workbook);
+                }
+                default -> throw new IllegalArgumentException("Unsupported template type: " + templateType);
+            }
             workbook.write(outputStream);
             return outputStream.toByteArray();
         } catch (Exception exception) {
             throw new IllegalStateException("Failed to build Excel template", exception);
         }
+    }
+
+    public String templateFileName(String templateType) {
+        return switch (normalizeTemplateType(templateType)) {
+            case "choice" -> "choice-question-import-template.xlsx";
+            case "judge" -> "judge-question-import-template.xlsx";
+            case "analysis" -> "analysis-question-import-template.xlsx";
+            case "all" -> "question-import-template.xlsx";
+            default -> "question-import-template.xlsx";
+        };
     }
 
     @Transactional
@@ -298,6 +315,19 @@ public class QuestionImportService {
             case "JUDGE", "\u5224\u65AD", "\u5224\u65AD\u9898" -> "JUDGE";
             case "ANALYSIS", "\u5206\u6790", "\u5206\u6790\u9898", "\u95EE\u7B54", "\u95EE\u7B54\u9898" -> "ANALYSIS";
             default -> throw new IllegalArgumentException("Unsupported question type: " + value);
+        };
+    }
+
+    private String normalizeTemplateType(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "all";
+        }
+        return switch (value.trim().toLowerCase(Locale.ROOT)) {
+            case "choice", "choices", "single", "multiple", "\u9009\u62E9\u9898", "\u5355\u9009", "\u591A\u9009" -> "choice";
+            case "judge", "judgement", "truefalse", "\u5224\u65AD\u9898", "\u5224\u65AD" -> "judge";
+            case "analysis", "essay", "\u5206\u6790\u9898", "\u5206\u6790", "\u95EE\u7B54" -> "analysis";
+            case "all", "\u5168\u90E8" -> "all";
+            default -> value.trim().toLowerCase(Locale.ROOT);
         };
     }
 

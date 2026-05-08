@@ -7,6 +7,14 @@ const loading = ref(false)
 const downloading = ref(false)
 const error = ref('')
 const result = ref(null)
+const templateType = ref('choice')
+
+const templateNames = {
+  choice: 'choice-question-import-template.xlsx',
+  judge: 'judge-question-import-template.xlsx',
+  analysis: 'analysis-question-import-template.xlsx',
+  all: 'question-import-template.xlsx',
+}
 
 function onFileChange(event) {
   file.value = event.target.files?.[0] || null
@@ -18,8 +26,8 @@ async function downloadTemplate() {
   downloading.value = true
   error.value = ''
   try {
-    const blob = await api.importTemplate()
-    downloadBlob(blob, 'question-import-template.xlsx')
+    const blob = await api.importTemplate(templateType.value)
+    downloadBlob(blob, templateNames[templateType.value])
   } catch (err) {
     error.value = err.message || '模板下载失败'
   } finally {
@@ -54,9 +62,17 @@ async function upload() {
         <h2 class="page-title">批量导入</h2>
         <p class="page-desc">使用 Excel 模板导入题目、选项、答案、解析和来源文件。</p>
       </div>
-      <button class="btn" type="button" :disabled="downloading" @click="downloadTemplate">
-        {{ downloading ? '下载中' : '下载模板' }}
-      </button>
+      <div style="display: flex; gap: 10px">
+        <select v-model="templateType" class="select" style="width: 180px">
+          <option value="choice">选择题模板</option>
+          <option value="judge">判断题模板</option>
+          <option value="analysis">分析题模板</option>
+          <option value="all">全部模板</option>
+        </select>
+        <button class="btn" type="button" :disabled="downloading" @click="downloadTemplate">
+          {{ downloading ? '下载中' : '下载模板' }}
+        </button>
+      </div>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>

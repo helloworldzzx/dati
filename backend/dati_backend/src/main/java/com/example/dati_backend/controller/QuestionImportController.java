@@ -40,10 +40,10 @@ public class QuestionImportController {
     }
 
     @GetMapping("/api/admin/questions/import-template")
-    public ResponseEntity<byte[]> importTemplate() {
-        byte[] content = importService.buildTemplate();
+    public ResponseEntity<byte[]> importTemplate(@RequestParam(defaultValue = "all") String type) {
+        byte[] content = importService.buildTemplate(type);
         ContentDisposition disposition = ContentDisposition.attachment()
-                .filename("question-import-template.xlsx")
+                .filename(importService.templateFileName(type))
                 .build();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
