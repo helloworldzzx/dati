@@ -94,7 +94,7 @@ onMounted(load)
         <div class="ranking-hero">
           <div class="ranking-kicker">TOP 榜单</div>
           <h1>答题排行榜</h1>
-          <p>{{ rankTitle }}</p>
+          <!-- <p>{{ rankTitle }}</p> -->
         </div>
 
         <div class="ranking-sort">
@@ -105,7 +105,7 @@ onMounted(load)
           </el-radio-group>
         </div>
 
-        <div v-if="topPodium.length" class="ranking-podium">
+        <!-- <div v-if="topPodium.length" class="ranking-podium">
           <div
             v-for="entry in topPodium"
             :key="entry.rank"
@@ -115,7 +115,7 @@ onMounted(load)
             <strong>{{ userName(entry.item) }}</strong>
             <span>{{ metricValue(entry.item) }}</span>
           </div>
-        </div>
+        </div> -->
 
         <section class="ranking-board">
           <div class="ranking-board-title">
@@ -138,7 +138,7 @@ onMounted(load)
                 </div>
                 <div class="ranking-user">
                   <strong>{{ userName(item) }}</strong>
-                  <span>{{ item.username }}</span>
+                  <!-- <span>{{ item.username }}</span> -->
                 </div>
                 <div class="ranking-score">
                   <strong>{{ metricValue(item) }}</strong>

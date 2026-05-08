@@ -801,9 +801,12 @@ a {
 .ranking-row {
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr) 94px;
-  gap: 8px;
+  gap: 16px;
   align-items: center;
+  justify-items: center;
+  text-align: center;
 }
+
 
 .ranking-table-head {
   min-height: 38px;
