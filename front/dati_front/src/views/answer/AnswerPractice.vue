@@ -17,6 +17,7 @@ const currentDetail = ref(null)
 const selectedAnswers = ref([])
 const analysisAnswer = ref('')
 const favoriteIds = ref(new Set())
+const pageTurn = ref('next')
 
 const records = reactive({})
 const drafts = reactive({})
@@ -58,6 +59,7 @@ const currentRecord = computed(() => (currentQuestion.value ? records[currentQue
 const submitted = computed(() => Boolean(currentRecord.value?.submitted))
 const userAnswerText = computed(() => currentRecord.value?.userAnswer || selectedAnswers.value.join(','))
 const isFavorite = computed(() => currentQuestion.value && favoriteIds.value.has(currentQuestion.value.id))
+const pageTurnName = computed(() => `page-turn-${pageTurn.value}`)
 const showManualSubmit = computed(() => {
   const type = currentQuestion.value?.type
   return (type === 'MULTIPLE' || type === 'ANALYSIS') && !submitted.value
@@ -306,7 +308,10 @@ async function toggleFavorite() {
 }
 
 function previous() {
-  if (currentIndex.value > 0) currentIndex.value -= 1
+  if (currentIndex.value > 0) {
+    pageTurn.value = 'prev'
+    currentIndex.value -= 1
+  }
 }
 
 function goBack() {
@@ -315,6 +320,7 @@ function goBack() {
 
 function next() {
   if (currentIndex.value < questions.value.length - 1) {
+    pageTurn.value = 'next'
     currentIndex.value += 1
     return
   }
@@ -386,77 +392,80 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <section class="question-card">
-          <span class="question-type">{{ typeLabel(currentQuestion.type) }}</span>
-          <h1 class="question-title">{{ currentQuestion.title }}</h1>
+        <Transition :name="pageTurnName" mode="out-in">
+          <div :key="currentQuestion.id" class="question-page-frame">
+            <section class="question-card">
+              <span class="question-type">{{ typeLabel(currentQuestion.type) }}</span>
+              <h1 class="question-title">{{ currentQuestion.title }}</h1>
 
-          <template v-if="currentQuestion.type === 'ANALYSIS'">
-            <el-input
-              v-model="analysisAnswer"
-              type="textarea"
-              :rows="7"
-              :disabled="submitted"
-              placeholder="请输入你的答案"
-            />
-          </template>
-
-          <div v-else class="option-mobile-list">
-            <button
-              v-for="option in options"
-              :key="option.optionKey"
-              class="option-mobile"
-              :class="optionClass(option)"
-              type="button"
-              @click="toggleOption(option)"
-            >
-              <span class="option-key">
-                {{ option.optionKey === 'TRUE' ? '对' : option.optionKey === 'FALSE' ? '错' : option.optionKey }}
-              </span>
-              <span class="option-text">{{ option.optionContent }}</span>
-            </button>
-          </div>
-
-        </section>
-
-        <section v-if="submitted" class="answer-section">
-          <div class="answer-section-inner">
-            <h2 class="answer-section-title">
-              <el-icon><Document /></el-icon>答案</h2>
-            <div class="answer-result-box">
-              <div class="answer-result-row">
-                <span>正确答案：</span>
-                <strong style="color: #13c56b">{{ answerLabel(currentQuestion.correctAnswer) }}</strong>
-                <span>你的答案：</span>
-                <strong :style="{ color: currentRecord?.correct ? '#13c56b' : '#ff4d4f' }">
-                  {{ answerLabel(userAnswerText) }}
-                </strong>
-              </div>
-              <div class="answer-result-row">
-                <span>个人正确率：</span>
-                <strong style="color: #1677ff">{{ personalAccuracy(currentRecord) }}</strong>
-                <span>全站正确率：</span>
-                <strong style="color: #1677ff">{{ globalAccuracy(currentQuestion) }}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div class="answer-section-inner" style="border-top: 8px solid #f3f4f6">
-            <h2 class="answer-section-title">
-              <el-icon><Document /></el-icon>
-              解析
-            </h2>
-            <div class="answer-analysis">
-              <strong>【答案解析】</strong>
-              <br />
-              {{ currentQuestion.analysis || '暂无解析' }}
-              <template v-if="currentQuestion.sourceFile">
-                <br /><br />
-                <strong>【来源文件】</strong>
-                {{ currentQuestion.sourceFile }}
+              <template v-if="currentQuestion.type === 'ANALYSIS'">
+                <el-input
+                  v-model="analysisAnswer"
+                  type="textarea"
+                  :rows="7"
+                  :disabled="submitted"
+                  placeholder="请输入你的答案"
+                />
               </template>
-            </div>
+
+              <div v-else class="option-mobile-list">
+                <button
+                  v-for="option in options"
+                  :key="option.optionKey"
+                  class="option-mobile"
+                  :class="optionClass(option)"
+                  type="button"
+                  @click="toggleOption(option)"
+                >
+                  <span class="option-key">
+                    {{ option.optionKey === 'TRUE' ? '对' : option.optionKey === 'FALSE' ? '错' : option.optionKey }}
+                  </span>
+                  <span class="option-text">{{ option.optionContent }}</span>
+                </button>
+              </div>
+            </section>
+
+            <section v-if="submitted" class="answer-section">
+              <div class="answer-section-inner">
+                <h2 class="answer-section-title">
+                  <el-icon><Document /></el-icon>答案</h2>
+                <div class="answer-result-box">
+                  <div class="answer-result-row">
+                    <span>正确答案：</span>
+                    <strong style="color: #13c56b">{{ answerLabel(currentQuestion.correctAnswer) }}</strong>
+                    <span>你的答案：</span>
+                    <strong :style="{ color: currentRecord?.correct ? '#13c56b' : '#ff4d4f' }">
+                      {{ answerLabel(userAnswerText) }}
+                    </strong>
+                  </div>
+                  <div class="answer-result-row">
+                    <span>个人正确率：</span>
+                    <strong style="color: #1677ff">{{ personalAccuracy(currentRecord) }}</strong>
+                    <span>全站正确率：</span>
+                    <strong style="color: #1677ff">{{ globalAccuracy(currentQuestion) }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="answer-section-inner" style="border-top: 8px solid #f3f4f6">
+                <h2 class="answer-section-title">
+                  <el-icon><Document /></el-icon>
+                  解析
+                </h2>
+                <div class="answer-analysis">
+                  <strong>【答案解析】</strong>
+                  <br />
+                  {{ currentQuestion.analysis || '暂无解析' }}
+                  <template v-if="currentQuestion.sourceFile">
+                    <br /><br />
+                    <strong>【来源文件】</strong>
+                    {{ currentQuestion.sourceFile }}
+                  </template>
+                </div>
+              </div>
+            </section>
           </div>
-        </section>
+        </Transition>
 
         <footer class="question-bottom">
           <el-button

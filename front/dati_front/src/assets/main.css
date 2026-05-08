@@ -1164,9 +1164,44 @@ a {
 }
 
 .practice-page {
+  overflow-x: hidden;
   padding-bottom: calc(128px + env(safe-area-inset-bottom));
   overscroll-behavior-x: contain;
   touch-action: pan-y;
+}
+
+.question-page-frame {
+  position: relative;
+  min-height: calc(100dvh - 210px);
+  background: #ffffff;
+  will-change: transform, opacity;
+}
+
+.page-turn-next-enter-active,
+.page-turn-next-leave-active,
+.page-turn-prev-enter-active,
+.page-turn-prev-leave-active {
+  transition: transform 0.26s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.22s ease;
+}
+
+.page-turn-next-enter-from {
+  opacity: 0;
+  transform: translateX(42px);
+}
+
+.page-turn-next-leave-to {
+  opacity: 0;
+  transform: translateX(-42px);
+}
+
+.page-turn-prev-enter-from {
+  opacity: 0;
+  transform: translateX(-42px);
+}
+
+.page-turn-prev-leave-to {
+  opacity: 0;
+  transform: translateX(42px);
 }
 
 .question-card {
