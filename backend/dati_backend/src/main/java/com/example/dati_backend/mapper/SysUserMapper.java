@@ -66,4 +66,30 @@ public interface SysUserMapper {
             WHERE id = #{id}
             """)
     int updateStatus(@Param("id") Long id, @Param("status") String status);
+
+    @Update("""
+            UPDATE sys_user
+            SET phone = #{phone},
+                password_hash = #{passwordHash},
+                must_change_password = #{mustChangePassword}
+            WHERE id = #{id}
+            """)
+    int updatePhoneAndPassword(
+            @Param("id") Long id,
+            @Param("phone") String phone,
+            @Param("passwordHash") String passwordHash,
+            @Param("mustChangePassword") Boolean mustChangePassword
+    );
+
+    @Update("""
+            UPDATE sys_user
+            SET password_hash = #{passwordHash},
+                must_change_password = #{mustChangePassword}
+            WHERE id = #{id}
+            """)
+    int updatePassword(
+            @Param("id") Long id,
+            @Param("passwordHash") String passwordHash,
+            @Param("mustChangePassword") Boolean mustChangePassword
+    );
 }

@@ -45,7 +45,7 @@ public class UserService {
         user.setRealName(trimToNull(request.realName()));
         user.setRole(defaultText(request.role(), "USER").toUpperCase());
         user.setStatus(defaultText(request.status(), "ENABLED").toUpperCase());
-        user.setMustChangePassword(true);
+        user.setMustChangePassword(request.mustChangePassword() == null || request.mustChangePassword());
         userMapper.insert(user);
         return getUser(user.getId());
     }
@@ -64,7 +64,9 @@ public class UserService {
         }
         if (StringUtils.hasText(request.password())) {
             user.setPasswordHash(passwordEncoder.encode(request.password()));
-            user.setMustChangePassword(false);
+            user.setMustChangePassword(request.mustChangePassword() == null || request.mustChangePassword());
+        } else if (request.mustChangePassword() != null) {
+            user.setMustChangePassword(request.mustChangePassword());
         }
         if (request.realName() != null) {
             user.setRealName(trimToNull(request.realName()));
