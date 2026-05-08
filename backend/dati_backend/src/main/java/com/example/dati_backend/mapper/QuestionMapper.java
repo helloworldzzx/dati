@@ -2,6 +2,7 @@ package com.example.dati_backend.mapper;
 
 import com.example.dati_backend.entity.Question;
 import java.util.List;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -102,4 +103,21 @@ public interface QuestionMapper {
             WHERE id = #{questionId}
             """)
     int increaseCounters(@Param("questionId") Long questionId, @Param("correct") Boolean correct);
+
+    @Delete("""
+            DELETE FROM question
+            WHERE id = #{id}
+            """)
+    int deleteById(Long id);
+
+    @Delete("""
+            <script>
+            DELETE FROM question
+            WHERE id IN
+            <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+            </foreach>
+            </script>
+            """)
+    int deleteBatch(@Param("ids") List<Long> ids);
 }

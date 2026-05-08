@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { Delete as DeleteIcon, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/services/api'
 
 const MAX_OPTIONS = 10
@@ -13,6 +13,8 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const dialogLoading = ref(false)
 const saving = ref(false)
+const deleting = ref(false)
+const selectedQuestionIds = ref([])
 const formRef = ref()
 
 const filters = reactive({
@@ -266,10 +268,59 @@ async function loadQuestions() {
         }
       }),
     )
+    selectedQuestionIds.value = []
   } catch (err) {
     ElMessage.error(err.message || '加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+function handleSelectionChange(rows) {
+  selectedQuestionIds.value = rows.map((item) => item.id)
+}
+
+async function removeQuestion(question) {
+  try {
+    await ElMessageBox.confirm('确认删除这道题吗？删除后相关选项、答题记录和用户题目统计会一起删除。', '删除题目', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+    deleting.value = true
+    await api.deleteQuestion(question.id)
+    ElMessage.success('题目已删除')
+    await loadQuestions()
+  } catch (err) {
+    if (err !== 'cancel') ElMessage.error(err.message || '删除失败')
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function removeSelectedQuestions() {
+  if (!selectedQuestionIds.value.length) {
+    ElMessage.warning('请先选择要删除的题目')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认删除选中的 ${selectedQuestionIds.value.length} 道题吗？删除后相关选项、答题记录和用户题目统计会一起删除。`,
+      '批量删除题目',
+      {
+        type: 'warning',
+        confirmButtonText: '批量删除',
+        cancelButtonText: '取消',
+      },
+    )
+    deleting.value = true
+    await api.deleteQuestions(selectedQuestionIds.value)
+    ElMessage.success('题目已批量删除')
+    await loadQuestions()
+  } catch (err) {
+    if (err !== 'cancel') ElMessage.error(err.message || '批量删除失败')
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -428,11 +479,31 @@ onMounted(loadAll)
       <template #header>
         <div class="toolbar-inline" style="justify-content: space-between">
           <strong>题目列表</strong>
-          <el-button :icon="Refresh" :loading="loading" @click="loadQuestions">刷新</el-button>
+          <div class="toolbar-inline">
+            <el-button
+              type="danger"
+              plain
+              :icon="DeleteIcon"
+              :disabled="!selectedQuestionIds.length"
+              :loading="deleting"
+              @click="removeSelectedQuestions"
+            >
+              批量删除
+            </el-button>
+            <el-button :icon="Refresh" :loading="loading" @click="loadQuestions">刷新</el-button>
+          </div>
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="questions" stripe height="660" empty-text="暂无题目">
+      <el-table
+        v-loading="loading"
+        :data="questions"
+        stripe
+        height="660"
+        empty-text="暂无题目"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="46" fixed="left" />
         <el-table-column label="题型" width="90">
           <template #default="{ row }">
             <el-tag :type="typeTag(row.type)">{{ typeLabel(row.type) }}</el-tag>
@@ -474,9 +545,19 @@ onMounted(loadAll)
             <el-tag :type="row.status === 'ENABLED' ? 'success' : 'warning'">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <el-button size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :icon="DeleteIcon"
+              :loading="deleting"
+              @click="removeQuestion(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>

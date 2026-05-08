@@ -11,6 +11,7 @@ import com.example.dati_backend.mapper.QuestionOptionMapper;
 import com.example.dati_backend.mapper.UserQuestionStatMapper;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +58,23 @@ public class QuestionService {
 
     public List<Question> listFavoriteQuestions(Long userId) {
         return questionMapper.listFavoriteByUser(userId);
+    }
+
+    @Transactional
+    public void deleteQuestion(Long id) {
+        getQuestion(id);
+        questionMapper.deleteById(id);
+    }
+
+    @Transactional
+    public void deleteQuestions(List<Long> ids) {
+        List<Long> safeIds = ids == null
+                ? List.of()
+                : ids.stream().filter(Objects::nonNull).distinct().toList();
+        if (safeIds.isEmpty()) {
+            throw new IllegalArgumentException("Question ids are required");
+        }
+        questionMapper.deleteBatch(safeIds);
     }
 
     @Transactional

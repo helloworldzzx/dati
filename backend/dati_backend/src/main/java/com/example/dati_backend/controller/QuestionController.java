@@ -1,12 +1,14 @@
 package com.example.dati_backend.controller;
 
 import com.example.dati_backend.common.ApiResponse;
+import com.example.dati_backend.dto.QuestionBatchDeleteRequest;
 import com.example.dati_backend.dto.QuestionDetailResponse;
 import com.example.dati_backend.dto.QuestionRequest;
 import com.example.dati_backend.entity.Question;
 import com.example.dati_backend.service.QuestionService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -50,5 +52,17 @@ public class QuestionController {
             @RequestBody QuestionRequest request
     ) {
         return ApiResponse.ok(questionService.updateQuestion(id, request));
+    }
+
+    @DeleteMapping("/api/admin/questions/{id}")
+    public ApiResponse<Void> deleteQuestion(@PathVariable Long id) {
+        questionService.deleteQuestion(id);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/api/admin/questions/batch-delete")
+    public ApiResponse<Void> deleteQuestions(@RequestBody QuestionBatchDeleteRequest request) {
+        questionService.deleteQuestions(request == null ? null : request.ids());
+        return ApiResponse.ok();
     }
 }

@@ -139,6 +139,8 @@ export const api = {
   questionDetail: (id, userId) => request(`/api/questions/${id}${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
   createQuestion: (body) => request('/api/admin/questions', { method: 'POST', body }),
   updateQuestion: (id, body) => request(`/api/admin/questions/${id}`, { method: 'PUT', body }),
+  deleteQuestion: (id) => request(`/api/admin/questions/${id}`, { method: 'DELETE' }),
+  deleteQuestions: (ids) => request('/api/admin/questions/batch-delete', { method: 'POST', body: { ids } }),
 
   rankings: (limit = 50) => request(`/api/rankings?limit=${limit}`),
   startSession: (body) => request('/api/practice/sessions', { method: 'POST', body }),
