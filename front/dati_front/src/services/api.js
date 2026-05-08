@@ -1,13 +1,38 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-const TOKEN_KEY = 'dati_auth_token'
-const USER_KEY = 'dati_auth_user'
+const AUTH_KEYS = {
+  admin: {
+    token: 'dati_admin_auth_token',
+    user: 'dati_admin_auth_user',
+  },
+  answer: {
+    token: 'dati_answer_auth_token',
+    user: 'dati_answer_auth_user',
+  },
+}
+let activeAuthScope = inferAuthScope()
 
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
+export function inferAuthScope() {
+  return window.location.pathname.startsWith('/admin') ? 'admin' : 'answer'
 }
 
-export function getStoredUser() {
-  const value = localStorage.getItem(USER_KEY)
+export function setAuthScope(scope) {
+  activeAuthScope = scope === 'admin' ? 'admin' : 'answer'
+}
+
+export function scopeForUser(user) {
+  return user?.role === 'ADMIN' ? 'admin' : 'answer'
+}
+
+function keysFor(scope = activeAuthScope) {
+  return AUTH_KEYS[scope === 'admin' ? 'admin' : 'answer']
+}
+
+export function getToken(scope = activeAuthScope) {
+  return localStorage.getItem(keysFor(scope).token)
+}
+
+export function getStoredUser(scope = activeAuthScope) {
+  const value = localStorage.getItem(keysFor(scope).user)
   if (!value) return null
   try {
     return JSON.parse(value)
@@ -17,17 +42,19 @@ export function getStoredUser() {
 }
 
 export function saveAuth(token, user) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  const scope = scopeForUser(user)
+  setAuthScope(scope)
+  localStorage.setItem(keysFor(scope).token, token)
+  localStorage.setItem(keysFor(scope).user, JSON.stringify(user))
 }
 
-export function saveUser(user) {
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
+export function saveUser(user, scope = activeAuthScope) {
+  localStorage.setItem(keysFor(scope).user, JSON.stringify(user))
 }
 
-export function clearAuth() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
+export function clearAuth(scope = activeAuthScope) {
+  localStorage.removeItem(keysFor(scope).token)
+  localStorage.removeItem(keysFor(scope).user)
 }
 
 async function parseResponse(response) {
@@ -47,7 +74,7 @@ async function parseResponse(response) {
 
 export async function request(path, options = {}) {
   const headers = new Headers(options.headers || {})
-  const token = getToken()
+  const token = getToken(options.authScope || activeAuthScope)
   const hasBody = options.body !== undefined && options.body !== null
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
 
@@ -65,7 +92,7 @@ export async function request(path, options = {}) {
   })
 
   if (response.status === 401) {
-    clearAuth()
+    clearAuth(options.authScope || activeAuthScope)
     window.dispatchEvent(new CustomEvent('auth-expired'))
   }
 
@@ -107,7 +134,7 @@ export const api = {
   deleteCategory: (id) => request(`/api/categories/${id}`, { method: 'DELETE' }),
 
   questions: (params = {}) => request(`/api/questions?${query(params)}`),
-  questionDetail: (id) => request(`/api/questions/${id}`),
+  questionDetail: (id, userId) => request(`/api/questions/${id}${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
   createQuestion: (body) => request('/api/admin/questions', { method: 'POST', body }),
   updateQuestion: (id, body) => request(`/api/admin/questions/${id}`, { method: 'PUT', body }),
 
