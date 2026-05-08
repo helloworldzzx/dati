@@ -125,6 +125,8 @@ export const api = {
   createUser: (body) => request('/api/admin/users', { method: 'POST', body }),
   updateUser: (id, body) => request(`/api/admin/users/${id}`, { method: 'PUT', body }),
   disableUser: (id) => request(`/api/admin/users/${id}/disable`, { method: 'PATCH' }),
+  importUsers: (formData) => request('/api/admin/users/import', { method: 'POST', body: formData }),
+  userImportTemplate: () => request('/api/admin/users/import-template'),
 
   categories: () => request('/api/categories'),
   categoryTree: () => request('/api/categories/tree'),

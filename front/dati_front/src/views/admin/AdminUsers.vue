@@ -1,13 +1,18 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Edit, Plus, Refresh, SwitchButton } from '@element-plus/icons-vue'
+import { Download, Edit, Plus, Refresh, SwitchButton, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { api } from '@/services/api'
+import { api, downloadBlob } from '@/services/api'
 
 const users = ref([])
 const selectedId = ref(null)
 const loading = ref(false)
 const saving = ref(false)
+const downloading = ref(false)
+const importVisible = ref(false)
+const importing = ref(false)
+const importFile = ref(null)
+const importResult = ref(null)
 const formRef = ref()
 
 const form = reactive({
@@ -108,6 +113,58 @@ async function disable(user) {
   }
 }
 
+async function downloadTemplate() {
+  downloading.value = true
+  try {
+    const blob = await api.userImportTemplate()
+    downloadBlob(blob, 'user-import-template.xlsx')
+  } catch (err) {
+    ElMessage.error(err.message || '模板下载失败')
+  } finally {
+    downloading.value = false
+  }
+}
+
+function beforeImportUpload(rawFile) {
+  importFile.value = rawFile
+  importResult.value = null
+  return false
+}
+
+function removeImportFile() {
+  importFile.value = null
+}
+
+function openImport() {
+  importVisible.value = true
+  importFile.value = null
+  importResult.value = null
+}
+
+async function uploadImport() {
+  if (!importFile.value) {
+    ElMessage.warning('请选择 Excel 文件')
+    return
+  }
+  importing.value = true
+  importResult.value = null
+  try {
+    const formData = new FormData()
+    formData.append('file', importFile.value)
+    importResult.value = await api.importUsers(formData)
+    if (importResult.value.failCount) {
+      ElMessage.warning('导入完成，部分用户失败')
+    } else {
+      ElMessage.success('用户导入完成')
+    }
+    await load()
+  } catch (err) {
+    ElMessage.error(err.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -116,9 +173,13 @@ onMounted(load)
     <div class="page-head">
       <div>
         <h2 class="page-title">用户管理</h2>
-        <p class="page-desc">管理员统一创建用户账号并设置初始密码。</p>
+        <p class="page-desc">管理员统一创建用户账号，并设置初始密码。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="resetForm">新建用户</el-button>
+      <div class="toolbar-inline">
+        <el-button :icon="Download" :loading="downloading" @click="downloadTemplate">下载模板</el-button>
+        <el-button :icon="UploadFilled" @click="openImport">Excel 导入</el-button>
+        <el-button type="primary" :icon="Plus" @click="resetForm">新建用户</el-button>
+      </div>
     </div>
 
     <div class="content-grid">
@@ -140,12 +201,16 @@ onMounted(load)
           </el-table-column>
           <el-table-column label="角色" width="110">
             <template #default="{ row }">
-              <el-tag :type="row.role === 'ADMIN' ? 'warning' : 'info'">{{ row.role }}</el-tag>
+              <el-tag :type="row.role === 'ADMIN' ? 'warning' : 'info'">
+                {{ row.role === 'ADMIN' ? '管理员' : '用户' }}
+              </el-tag>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="110">
             <template #default="{ row }">
-              <el-tag :type="row.status === 'ENABLED' ? 'success' : 'danger'">{{ row.status }}</el-tag>
+              <el-tag :type="row.status === 'ENABLED' ? 'success' : 'danger'">
+                {{ row.status === 'ENABLED' ? '启用' : '禁用' }}
+              </el-tag>
             </template>
           </el-table-column>
           <el-table-column label="首次登录" width="110">
@@ -206,5 +271,57 @@ onMounted(load)
         </el-form>
       </el-card>
     </div>
+
+    <el-dialog v-model="importVisible" title="Excel 导入用户" width="620px">
+      <div class="file-box">
+        <el-alert type="info" :closable="false" show-icon>
+          请先下载模板填写用户信息。账号必填，初始密码为空时默认 123456。
+        </el-alert>
+
+        <el-upload
+          drag
+          action="#"
+          accept=".xlsx,.xls"
+          :auto-upload="false"
+          :limit="1"
+          :before-upload="beforeImportUpload"
+          :on-remove="removeImportFile"
+        >
+          <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+          <div class="el-upload__text">拖拽 Excel 到这里，或 <em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持 .xlsx / .xls，按模板第一张工作表导入。</div>
+          </template>
+        </el-upload>
+
+        <el-alert v-if="importFile" type="success" :closable="false" show-icon>
+          当前文件：{{ importFile.name }}
+        </el-alert>
+
+        <el-card v-if="importResult" shadow="never">
+          <div class="stat-grid">
+            <el-statistic title="总行数" :value="importResult.totalCount" />
+            <el-statistic title="成功" :value="importResult.successCount" />
+            <el-statistic title="失败" :value="importResult.failCount" />
+          </div>
+
+          <el-table
+            v-if="importResult.errors?.length"
+            class="card-gap"
+            :data="importResult.errors"
+            size="small"
+            max-height="220"
+          >
+            <el-table-column prop="rowNo" label="行号" width="90" />
+            <el-table-column prop="message" label="失败原因" min-width="260" />
+          </el-table>
+        </el-card>
+      </div>
+
+      <template #footer>
+        <el-button @click="importVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="importing" @click="uploadImport">开始导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
