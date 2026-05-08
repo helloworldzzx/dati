@@ -8,6 +8,7 @@ import com.example.dati_backend.entity.QuestionOption;
 import com.example.dati_backend.mapper.QuestionCategoryMapper;
 import com.example.dati_backend.mapper.QuestionMapper;
 import com.example.dati_backend.mapper.QuestionOptionMapper;
+import com.example.dati_backend.mapper.UserQuestionStatMapper;
 import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -21,10 +22,19 @@ public class QuestionService {
     private final QuestionMapper questionMapper;
     private final QuestionOptionMapper optionMapper;
     private final QuestionCategoryMapper categoryMapper;
+    private final UserQuestionStatMapper userQuestionStatMapper;
 
     public QuestionDetailResponse getQuestionDetail(Long id) {
+        return getQuestionDetail(id, null);
+    }
+
+    public QuestionDetailResponse getQuestionDetail(Long id, Long userId) {
         Question question = getQuestion(id);
-        return new QuestionDetailResponse(question, optionMapper.listByQuestionId(id));
+        return new QuestionDetailResponse(
+                question,
+                optionMapper.listByQuestionId(id),
+                userId == null ? null : userQuestionStatMapper.findByUserAndQuestion(userId, id)
+        );
     }
 
     public Question getQuestion(Long id) {

@@ -32,8 +32,11 @@ public class QuestionController {
     }
 
     @GetMapping("/api/questions/{id}")
-    public ApiResponse<QuestionDetailResponse> getQuestion(@PathVariable Long id) {
-        return ApiResponse.ok(questionService.getQuestionDetail(id));
+    public ApiResponse<QuestionDetailResponse> getQuestion(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long userId
+    ) {
+        return ApiResponse.ok(questionService.getQuestionDetail(id, userId));
     }
 
     @PostMapping("/api/admin/questions")

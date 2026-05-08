@@ -72,8 +72,13 @@ const router = createRouter({
   ],
 })
 
+function scopeFromPath(path) {
+  return path.startsWith('/admin') ? 'admin' : 'answer'
+}
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  auth.useScope(scopeFromPath(to.path))
 
   if (to.meta.public) {
     if (auth.isLoggedIn && !auth.ready) {
