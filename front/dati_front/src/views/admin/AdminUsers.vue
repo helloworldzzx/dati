@@ -131,6 +131,11 @@ function beforeImportUpload(rawFile) {
   return false
 }
 
+function handleImportChange(uploadFile) {
+  importFile.value = uploadFile.raw || uploadFile
+  importResult.value = null
+}
+
 function removeImportFile() {
   importFile.value = null
 }
@@ -285,6 +290,7 @@ onMounted(load)
           :auto-upload="false"
           :limit="1"
           :before-upload="beforeImportUpload"
+          :on-change="handleImportChange"
           :on-remove="removeImportFile"
         >
           <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
