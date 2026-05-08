@@ -1,16 +1,29 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Edit, Plus, Refresh, SwitchButton } from '@element-plus/icons-vue'
+import {
+  ArrowRight,
+  Delete as DeleteIcon,
+  Document,
+  Edit,
+  Folder,
+  FolderOpened,
+  Plus,
+  Refresh,
+  SwitchButton,
+} from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import CategoryTree from '@/components/admin/CategoryTree.vue'
 import { api } from '@/services/api'
 
 const categories = ref([])
 const selectedId = ref(null)
-const expandedIds = ref(new Set())
 const loading = ref(false)
 const saving = ref(false)
 const formRef = ref()
+
+const treeProps = {
+  children: 'children',
+  label: 'name',
+}
 
 const form = reactive({
   parentId: '',
@@ -49,22 +62,40 @@ function sortTree(nodes) {
 }
 
 function flattenTree(nodes) {
-  return nodes.flatMap((node) => [node, ...flattenTree(node.children)])
+  return nodes.flatMap((node) => [node, ...flattenTree(node.children || [])])
 }
 
-function syncExpandedTree(nodes) {
-  const next = new Set(expandedIds.value)
-  flattenTree(nodes)
-    .filter((node) => node.children.length > 0)
-    .forEach((node) => next.add(node.id))
-  expandedIds.value = next
+function hasChildren(category) {
+  return Boolean(category?.children?.length)
+}
+
+function canCreateChild(category) {
+  return Number(category?.level || 0) < 3
+}
+
+function statusText(status) {
+  return status === 'ENABLED' ? '启用' : '禁用'
+}
+
+function statusType(status) {
+  return status === 'ENABLED' ? 'success' : 'danger'
+}
+
+function categoryLabel(category) {
+  return `${'　'.repeat(category.level - 1)}${category.name}`
 }
 
 function toggleNode(node) {
-  const next = new Set(expandedIds.value)
-  if (next.has(node.id)) next.delete(node.id)
-  else next.add(node.id)
-  expandedIds.value = next
+  if (node.expanded) node.collapse()
+  else node.expand()
+}
+
+function handleNodeClick(node, category) {
+  if (hasChildren(category)) {
+    toggleNode(node)
+    return
+  }
+  edit(category)
 }
 
 function resetForm() {
@@ -72,6 +103,17 @@ function resetForm() {
   formRef.value?.clearValidate()
   Object.assign(form, {
     parentId: '',
+    name: '',
+    sortNo: 0,
+    status: 'ENABLED',
+  })
+}
+
+function createChild(category) {
+  selectedId.value = null
+  formRef.value?.clearValidate()
+  Object.assign(form, {
+    parentId: category.id,
     name: '',
     sortNo: 0,
     status: 'ENABLED',
@@ -105,7 +147,6 @@ async function load() {
   loading.value = true
   try {
     categories.value = await api.categories()
-    syncExpandedTree(treeNodes.value)
   } catch (err) {
     ElMessage.error(err.message || '加载失败')
   } finally {
@@ -182,21 +223,75 @@ onMounted(load)
       <el-card shadow="never" v-loading="loading">
         <template #header>
           <div class="toolbar-inline" style="justify-content: space-between">
-            <strong>分类列表</strong>
+            <strong>分类树</strong>
             <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
           </div>
         </template>
 
-        <CategoryTree
-          v-if="treeNodes.length"
-          :nodes="treeNodes"
-          :expanded-ids="expandedIds"
-          @toggle="toggleNode"
-          @edit="edit"
-          @disable="disable"
-          @delete="remove"
-        />
-        <el-empty v-else description="暂无分类" />
+        <div class="admin-category-tree-card">
+          <el-tree
+            v-if="treeNodes.length"
+            class="category-folder-tree admin-category-tree"
+            :data="treeNodes"
+            :props="treeProps"
+            node-key="id"
+            default-expand-all
+            :indent="22"
+            :expand-on-click-node="false"
+            :highlight-current="false"
+          >
+            <template #default="{ node, data }">
+              <div
+                :class="['category-tree-node admin-category-node', hasChildren(data) ? 'folder' : 'leaf']"
+                role="button"
+                tabindex="0"
+                @click.stop="handleNodeClick(node, data)"
+                @keydown.enter.prevent="handleNodeClick(node, data)"
+              >
+                <span class="category-tree-icon">
+                  <el-icon>
+                    <FolderOpened v-if="hasChildren(data) && node.expanded" />
+                    <Folder v-else-if="hasChildren(data)" />
+                    <Document v-else />
+                  </el-icon>
+                </span>
+
+                <span class="admin-category-main">
+                  <span class="admin-category-title">
+                    <strong>{{ data.name }}</strong>
+                    <el-tag size="small" :type="statusType(data.status)">{{ statusText(data.status) }}</el-tag>
+                  </span>
+                  <span>
+                    L{{ data.level }} · 排序 {{ data.sortNo || 0 }}
+                    <template v-if="hasChildren(data)"> · {{ data.children.length }} 个子分类</template>
+                  </span>
+                </span>
+
+                <div class="admin-category-actions">
+                  <el-button
+                    v-if="canCreateChild(data)"
+                    size="small"
+                    :icon="Plus"
+                    @click.stop="createChild(data)"
+                  >
+                    新增下级
+                  </el-button>
+                  <el-button size="small" :icon="Edit" @click.stop="edit(data)">编辑</el-button>
+                  <el-button size="small" type="danger" plain :icon="SwitchButton" @click.stop="disable(data)">
+                    禁用
+                  </el-button>
+                  <el-button size="small" type="danger" :icon="DeleteIcon" @click.stop="remove(data)">
+                    删除
+                  </el-button>
+                  <el-icon v-if="hasChildren(data)" :class="['category-tree-arrow', node.expanded ? 'open' : '']">
+                    <ArrowRight />
+                  </el-icon>
+                </div>
+              </div>
+            </template>
+          </el-tree>
+          <el-empty v-else description="暂无分类" />
+        </div>
       </el-card>
 
       <el-card shadow="never">
@@ -206,11 +301,11 @@ onMounted(load)
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
           <el-form-item label="上级分类">
-            <el-select v-model="form.parentId" clearable placeholder="无，上设为一级分类" style="width: 100%">
+            <el-select v-model="form.parentId" clearable placeholder="留空则创建一级分类" style="width: 100%">
               <el-option
                 v-for="item in parentOptions"
                 :key="item.id"
-                :label="`${'　'.repeat(item.level - 1)}${item.name}`"
+                :label="categoryLabel(item)"
                 :value="item.id"
               />
             </el-select>

@@ -20,7 +20,15 @@ const favoriteIds = ref(new Set())
 
 const records = reactive({})
 const drafts = reactive({})
+const swipeGesture = reactive({
+  startX: 0,
+  startY: 0,
+  ignored: false,
+})
 let saveTimer = null
+
+const SWIPE_MIN_DISTANCE = 72
+const SWIPE_DIRECTION_RATIO = 1.35
 
 const mode = computed(() => route.query.mode || 'practice')
 const categoryId = computed(() => (route.query.categoryId ? Number(route.query.categoryId) : null))
@@ -323,6 +331,34 @@ function personalAccuracy(record) {
   return record.correct ? '100%' : '0%'
 }
 
+function isSwipeIgnored(target) {
+  return Boolean(target?.closest?.('input, textarea, select, .el-input, .el-textarea, .question-bottom'))
+}
+
+function handleTouchStart(event) {
+  const touch = event.touches?.[0]
+  if (!touch) return
+  swipeGesture.startX = touch.clientX
+  swipeGesture.startY = touch.clientY
+  swipeGesture.ignored = isSwipeIgnored(event.target)
+}
+
+function handleTouchEnd(event) {
+  if (swipeGesture.ignored || !currentQuestion.value) return
+  const touch = event.changedTouches?.[0]
+  if (!touch) return
+
+  const deltaX = touch.clientX - swipeGesture.startX
+  const deltaY = touch.clientY - swipeGesture.startY
+  const absX = Math.abs(deltaX)
+  const absY = Math.abs(deltaY)
+
+  if (absX < SWIPE_MIN_DISTANCE || absX < absY * SWIPE_DIRECTION_RATIO) return
+
+  if (deltaX > 0) previous()
+  else next()
+}
+
 onMounted(loadQuestions)
 onBeforeUnmount(() => {
   saveProgressNow()
@@ -331,7 +367,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="mobile-shell">
-    <div class="mobile-page practice-page">
+    <div class="mobile-page practice-page" @touchstart.passive="handleTouchStart" @touchend.passive="handleTouchEnd">
       <template v-if="currentQuestion">
         <div class="question-topbar">
           <div class="question-tools">
@@ -384,7 +420,8 @@ onBeforeUnmount(() => {
 
         <section v-if="submitted" class="answer-section">
           <div class="answer-section-inner">
-            <h2 class="answer-section-title">答案</h2>
+            <h2 class="answer-section-title">
+              <el-icon><Document /></el-icon>答案</h2>
             <div class="answer-result-box">
               <div class="answer-result-row">
                 <span>正确答案：</span>

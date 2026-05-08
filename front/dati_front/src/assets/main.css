@@ -682,6 +682,66 @@ a {
   transform: rotate(90deg);
 }
 
+.admin-category-tree-card {
+  padding: 6px;
+  border: 1px solid #e6ebf2;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.admin-category-tree .el-tree-node__children {
+  margin-left: 18px;
+  padding-left: 14px;
+}
+
+.admin-category-node {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  min-height: 64px;
+  padding: 10px 12px;
+}
+
+.admin-category-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.admin-category-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.admin-category-title strong {
+  overflow: hidden;
+  color: #26324b;
+  font-size: 15px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-category-main > span:last-child {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-category-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.admin-category-actions .category-tree-arrow {
+  margin-left: 4px;
+}
+
 .mine-profile {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
@@ -1105,6 +1165,8 @@ a {
 
 .practice-page {
   padding-bottom: calc(128px + env(safe-area-inset-bottom));
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
 }
 
 .question-card {
