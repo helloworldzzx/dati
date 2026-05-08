@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, Clock, Document, Star, StarFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Document, Star, StarFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -17,8 +17,6 @@ const currentDetail = ref(null)
 const sessionId = ref(null)
 const selectedAnswers = ref([])
 const analysisAnswer = ref('')
-const elapsedSeconds = ref(0)
-const timer = ref(null)
 const favoriteIds = ref(new Set())
 
 const records = reactive({})
@@ -47,12 +45,6 @@ const userAnswerText = computed(() => currentRecord.value?.userAnswer || selecte
 const isFavorite = computed(() => currentQuestion.value && favoriteIds.value.has(currentQuestion.value.id))
 
 watch(currentIndex, loadCurrentDetail)
-
-function formatTime(seconds) {
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
-}
 
 function typeLabel(type) {
   return {
@@ -96,7 +88,6 @@ async function loadQuestions() {
       sessionId.value = session.id
       currentIndex.value = 0
       await loadCurrentDetail()
-      startTimer()
     }
   } catch (err) {
     ElMessage.error(err.message || '加载题目失败')
@@ -112,32 +103,19 @@ async function loadCurrentDetail() {
     return
   }
   try {
-    currentDetail.value = await api.questionDetail(item.id)
+    currentDetail.value = await api.questionDetail(item.id, auth.user.id)
+    const stat = currentDetail.value?.stat
+    const ids = new Set(favoriteIds.value)
+    if (stat?.favorite) ids.add(item.id)
+    else ids.delete(item.id)
+    favoriteIds.value = ids
+
     const record = records[item.id]
     selectedAnswers.value = record?.userAnswer ? record.userAnswer.split(',').filter(Boolean) : []
     analysisAnswer.value = record?.userAnswer || ''
-    resetTimer()
   } catch (err) {
     ElMessage.error(err.message || '加载题目详情失败')
   }
-}
-
-function startTimer() {
-  stopTimer()
-  timer.value = window.setInterval(() => {
-    elapsedSeconds.value += 1
-  }, 1000)
-}
-
-function stopTimer() {
-  if (timer.value) {
-    window.clearInterval(timer.value)
-    timer.value = null
-  }
-}
-
-function resetTimer() {
-  elapsedSeconds.value = 0
 }
 
 function toggleOption(option) {
@@ -170,7 +148,7 @@ function optionClass(option) {
 function splitAnswer(value) {
   if (!value) return []
   return String(value)
-    .split(/[,，、;\s]+/)
+    .split(/[,，、\s]+/)
     .map((item) => item.trim())
     .filter(Boolean)
 }
@@ -178,6 +156,12 @@ function splitAnswer(value) {
 function currentAnswer() {
   if (currentQuestion.value.type === 'ANALYSIS') return analysisAnswer.value.trim()
   return selectedAnswers.value.join(',')
+}
+
+function answerLabel(answer) {
+  if (answer === 'TRUE') return '正确'
+  if (answer === 'FALSE') return '错误'
+  return answer || '-'
 }
 
 async function submit() {
@@ -194,7 +178,7 @@ async function submit() {
       userId: auth.user.id,
       questionId: currentQuestion.value.id,
       userAnswer: answer,
-      durationSeconds: elapsedSeconds.value,
+      durationSeconds: 0,
     })
     records[currentQuestion.value.id] = {
       submitted: true,
@@ -210,14 +194,14 @@ async function toggleFavorite() {
   if (!currentQuestion.value) return
   try {
     const next = !favoriteIds.value.has(currentQuestion.value.id)
-    await api.updateFavorite(auth.user.id, currentQuestion.value.id, next)
+    const stat = await api.updateFavorite(auth.user.id, currentQuestion.value.id, next)
     const ids = new Set(favoriteIds.value)
-    if (next) ids.add(currentQuestion.value.id)
+    if (stat?.favorite ?? next) ids.add(currentQuestion.value.id)
     else ids.delete(currentQuestion.value.id)
     favoriteIds.value = ids
-    ElMessage.success(next ? '已收藏' : '已取消收藏')
+    ElMessage.success((stat?.favorite ?? next) ? '已收藏' : '已取消收藏')
   } catch (err) {
-    ElMessage.error(err.message || '操作失败')
+    ElMessage.error(err.message || '收藏失败')
   }
 }
 
@@ -238,7 +222,7 @@ async function finish() {
     try {
       await api.finishSession(sessionId.value)
     } catch {
-      // Finishing a session should not block navigation.
+      // 结束练习失败不阻塞返回首页。
     }
   }
   router.push('/answer')
@@ -246,7 +230,7 @@ async function finish() {
 
 function globalAccuracy(question) {
   if (!question?.answerCount) return '0%'
-  return `${Math.round((question.correctCount || 0) * 100 / question.answerCount)}%`
+  return `${Math.round(((question.correctCount || 0) * 100) / question.answerCount)}%`
 }
 
 function personalAccuracy(record) {
@@ -255,9 +239,6 @@ function personalAccuracy(record) {
 }
 
 onMounted(loadQuestions)
-onBeforeUnmount(() => {
-  stopTimer()
-})
 </script>
 
 <template>
@@ -267,10 +248,7 @@ onBeforeUnmount(() => {
         <div class="question-topbar">
           <div class="question-tools">
             <button class="tree-toggle" type="button" @click="router.push('/answer')">‹</button>
-            <span class="question-clock">
-              <el-icon><Clock /></el-icon>
-              {{ formatTime(elapsedSeconds) }}
-            </span>
+            <strong class="question-page-title">{{ pageTitle }}</strong>
             <el-tag size="small">{{ typeLabel(currentQuestion.type) }}</el-tag>
           </div>
           <div class="answer-header-actions">
@@ -316,7 +294,9 @@ onBeforeUnmount(() => {
               type="button"
               @click="toggleOption(option)"
             >
-              <span class="option-key">{{ option.optionKey === 'TRUE' ? '对' : option.optionKey === 'FALSE' ? '错' : option.optionKey }}</span>
+              <span class="option-key">
+                {{ option.optionKey === 'TRUE' ? '对' : option.optionKey === 'FALSE' ? '错' : option.optionKey }}
+              </span>
               <span class="option-text">{{ option.optionContent }}</span>
             </button>
           </div>
@@ -338,10 +318,10 @@ onBeforeUnmount(() => {
             <div class="answer-result-box">
               <div class="answer-result-row">
                 <span>正确答案：</span>
-                <strong style="color: #13c56b">{{ currentQuestion.correctAnswer || '-' }}</strong>
+                <strong style="color: #13c56b">{{ answerLabel(currentQuestion.correctAnswer) }}</strong>
                 <span>你的答案：</span>
                 <strong :style="{ color: currentRecord?.correct ? '#13c56b' : '#ff4d4f' }">
-                  {{ userAnswerText || '-' }}
+                  {{ answerLabel(userAnswerText) }}
                 </strong>
               </div>
               <div class="answer-result-row">
