@@ -1,6 +1,7 @@
 package com.example.dati_backend.service;
 
 import com.example.dati_backend.dto.QuestionOptionRequest;
+import com.example.dati_backend.dto.QuestionImportResult;
 import com.example.dati_backend.dto.QuestionRequest;
 import com.example.dati_backend.entity.QuestionCategory;
 import com.example.dati_backend.entity.QuestionImportBatch;
@@ -30,14 +31,15 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
 public class QuestionImportService {
-    private static final Pattern OPTION_BLOCK_PATTERN = Pattern.compile(
-            "(?s)(?:^|\\n)\\s*([A-Z])\\s*[\\.．、\\)）:：]\\s*(.*?)(?=\\n\\s*[A-Z]\\s*[\\.．、\\)）:：]|\\z)"
+    private static final Pattern OPTION_MARKER_PATTERN = Pattern.compile(
+            "(?<![A-Za-z])([A-Z])\\s*[\\.．、\\)）:：]"
     );
 
     private final QuestionImportBatchMapper batchMapper;
@@ -45,6 +47,7 @@ public class QuestionImportService {
     private final QuestionCategoryMapper categoryMapper;
     private final QuestionService questionService;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
     private final DataFormatter dataFormatter = new DataFormatter(Locale.CHINA);
 
     @Transactional
@@ -60,8 +63,7 @@ public class QuestionImportService {
         return batch;
     }
 
-    @Transactional
-    public QuestionImportBatch importQuestions(MultipartFile file, Long importedBy) {
+    public QuestionImportResult importQuestions(MultipartFile file, Long importedBy) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Excel file is required");
         }
@@ -93,14 +95,14 @@ public class QuestionImportService {
                     }
                     totalCount++;
                     try {
-                        importRow(row, header, importedBy);
+                        transactionTemplate.executeWithoutResult(status -> importRow(row, header, importedBy));
                         successCount++;
                     } catch (Exception exception) {
                         failCount++;
                         saveError(
                                 batch.getId(),
                                 rowIndex + 1,
-                                sheet.getSheetName() + ": " + exception.getMessage(),
+                                sheet.getSheetName() + ": " + exceptionMessage(exception),
                                 rawRowJson(row, header)
                         );
                     }
@@ -112,7 +114,7 @@ public class QuestionImportService {
             }
         } catch (Exception exception) {
             failCount++;
-            saveError(batch.getId(), 0, exception.getMessage(), "[]");
+            saveError(batch.getId(), 0, exceptionMessage(exception), "[]");
         }
 
         batch.setTotalCount(totalCount);
@@ -120,7 +122,7 @@ public class QuestionImportService {
         batch.setFailCount(failCount);
         batch.setStatus(resolveStatus(successCount, failCount));
         batchMapper.updateResult(batch);
-        return batchMapper.findById(batch.getId());
+        return buildResult(batch.getId());
     }
 
     public byte[] buildTemplate(String templateType) {
@@ -155,14 +157,35 @@ public class QuestionImportService {
         };
     }
 
+    public QuestionImportResult buildResult(Long batchId) {
+        QuestionImportBatch batch = batchMapper.findById(batchId);
+        return QuestionImportResult.from(batch, errorMapper.listByBatchId(batchId));
+    }
+
     @Transactional
     public void saveError(Long batchId, Integer rowNo, String message, String rawData) {
         QuestionImportError error = new QuestionImportError();
         error.setBatchId(batchId);
         error.setRowNo(rowNo);
-        error.setErrorMessage(message);
+        error.setErrorMessage(limitText(message, 500));
         error.setRawData(rawData);
         errorMapper.insert(error);
+    }
+
+    private String exceptionMessage(Exception exception) {
+        Throwable current = exception;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        return StringUtils.hasText(message) ? message : current.getClass().getSimpleName();
+    }
+
+    private String limitText(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private void importRow(Row row, HeaderMap header, Long importedBy) {
@@ -286,14 +309,20 @@ public class QuestionImportService {
         String normalized = optionsText
                 .replace("\r\n", "\n")
                 .replace('\r', '\n')
-                .replaceAll("\\s+([A-Z])\\s*([\\.．、\\)）:：])", "\n$1$2")
-                .trim();
+                .strip();
 
-        Matcher matcher = OPTION_BLOCK_PATTERN.matcher(normalized);
-        List<QuestionOptionRequest> options = new ArrayList<>();
+        Matcher matcher = OPTION_MARKER_PATTERN.matcher(normalized);
+        List<OptionMarker> markers = new ArrayList<>();
         while (matcher.find()) {
-            String optionKey = matcher.group(1);
-            String content = matcher.group(2).trim();
+            markers.add(new OptionMarker(matcher.group(1), matcher.start(), matcher.end()));
+        }
+
+        List<QuestionOptionRequest> options = new ArrayList<>();
+        for (int i = 0; i < markers.size(); i++) {
+            OptionMarker current = markers.get(i);
+            int contentEnd = i + 1 < markers.size() ? markers.get(i + 1).markerStart() : normalized.length();
+            String optionKey = current.optionKey();
+            String content = normalized.substring(current.contentStart(), contentEnd).strip();
             if (!StringUtils.hasText(content)) {
                 continue;
             }
@@ -612,5 +641,8 @@ public class QuestionImportService {
                     && titleColumn != null
                     && correctAnswerColumn != null;
         }
+    }
+
+    private record OptionMarker(String optionKey, int markerStart, int contentStart) {
     }
 }

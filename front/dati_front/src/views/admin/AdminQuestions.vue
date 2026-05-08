@@ -1,8 +1,8 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { Delete as DeleteIcon, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Delete as DeleteIcon, Download, Edit, Plus, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { api } from '@/services/api'
+import { api, downloadBlob } from '@/services/api'
 
 const MAX_OPTIONS = 10
 
@@ -14,8 +14,27 @@ const dialogVisible = ref(false)
 const dialogLoading = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
+const importVisible = ref(false)
+const importing = ref(false)
+const downloadingTemplate = ref(false)
+const importFile = ref(null)
+const importResult = ref(null)
 const selectedQuestionIds = ref([])
 const formRef = ref()
+
+const templateNames = {
+  choice: 'choice-question-import-template.xlsx',
+  judge: 'judge-question-import-template.xlsx',
+  analysis: 'analysis-question-import-template.xlsx',
+  all: 'question-import-template.xlsx',
+}
+
+const templateOptions = [
+  { label: '选择题模板', value: 'choice' },
+  { label: '判断题模板', value: 'judge' },
+  { label: '分析题模板', value: 'analysis' },
+  { label: '全部模板', value: 'all' },
+]
 
 const filters = reactive({
   level1Id: '',
@@ -196,6 +215,19 @@ function formatAnswer(answer) {
   return answer || '-'
 }
 
+function formatImportRawData(rawData) {
+  if (!rawData) return '-'
+  try {
+    const value = JSON.parse(rawData)
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join(' / ') || '-'
+    }
+    return String(value)
+  } catch {
+    return rawData
+  }
+}
+
 function resetForm() {
   selectedId.value = null
   Object.assign(form, {
@@ -324,6 +356,63 @@ async function removeSelectedQuestions() {
   }
 }
 
+async function downloadTemplate(type = 'all') {
+  downloadingTemplate.value = true
+  try {
+    const blob = await api.importTemplate(type)
+    downloadBlob(blob, templateNames[type] || templateNames.all)
+  } catch (err) {
+    ElMessage.error(err.message || '模板下载失败')
+  } finally {
+    downloadingTemplate.value = false
+  }
+}
+
+function openImport() {
+  importVisible.value = true
+  importFile.value = null
+  importResult.value = null
+}
+
+function beforeImportUpload(rawFile) {
+  importFile.value = rawFile
+  importResult.value = null
+  return false
+}
+
+function handleImportChange(uploadFile) {
+  importFile.value = uploadFile.raw || uploadFile
+  importResult.value = null
+}
+
+function removeImportFile() {
+  importFile.value = null
+}
+
+async function uploadImport() {
+  if (!importFile.value) {
+    ElMessage.warning('请选择 Excel 文件')
+    return
+  }
+  importing.value = true
+  importResult.value = null
+  try {
+    const formData = new FormData()
+    formData.append('file', importFile.value)
+    importResult.value = await api.importQuestions(formData)
+    if (importResult.value.failCount) {
+      ElMessage.warning('导入完成，部分题目失败')
+    } else {
+      ElMessage.success('题目导入完成')
+    }
+    await loadQuestions()
+  } catch (err) {
+    ElMessage.error(err.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
 async function loadAll() {
   try {
     await loadCategories()
@@ -436,7 +525,20 @@ onMounted(loadAll)
         <h2 class="page-title">题目管理</h2>
         <p class="page-desc">维护单选、多选、判断和分析题。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreate">新建题目</el-button>
+      <div class="toolbar-inline">
+        <el-dropdown trigger="click" @command="downloadTemplate">
+          <el-button :icon="Download" :loading="downloadingTemplate">下载模板</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item v-for="item in templateOptions" :key="item.value" :command="item.value">
+                {{ item.label }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button :icon="UploadFilled" @click="openImport">批量导入</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新建题目</el-button>
+      </div>
     </div>
 
     <el-card class="toolbar-card" shadow="never">
@@ -562,6 +664,89 @@ onMounted(loadAll)
         </el-table-column>
       </el-table>
     </el-card>
+
+    <el-dialog v-model="importVisible" title="批量导入题目" width="680px">
+      <div class="file-box">
+        <el-alert type="info" :closable="false" show-icon>
+          请先下载对应模板填写题目。选择题选项可写在一个单元格内，支持不固定数量的选项。
+        </el-alert>
+
+        <el-upload
+          drag
+          action="#"
+          accept=".xlsx,.xls"
+          :auto-upload="false"
+          :limit="1"
+          :before-upload="beforeImportUpload"
+          :on-change="handleImportChange"
+          :on-remove="removeImportFile"
+        >
+          <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+          <div class="el-upload__text">拖拽 Excel 到这里，或 <em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持 .xlsx / .xls，按模板工作表导入。</div>
+          </template>
+        </el-upload>
+
+        <el-alert v-if="importFile" type="success" :closable="false" show-icon>
+          当前文件：{{ importFile.name }}
+        </el-alert>
+
+        <el-card v-if="importResult" shadow="never">
+          <template #header>
+            <div class="toolbar-inline" style="justify-content: space-between">
+              <strong>导入结果</strong>
+              <el-tag
+                :type="
+                  importResult.status === 'SUCCESS'
+                    ? 'success'
+                    : importResult.status === 'FAILED'
+                      ? 'danger'
+                      : 'warning'
+                "
+              >
+                {{ importResult.status }}
+              </el-tag>
+            </div>
+          </template>
+          <div class="stat-grid">
+            <el-statistic title="总行数" :value="importResult.totalCount" />
+            <el-statistic title="成功" :value="importResult.successCount" />
+            <el-statistic title="失败" :value="importResult.failCount" />
+            <el-statistic title="批次 ID" :value="importResult.id" />
+          </div>
+          <el-alert
+            v-if="importResult.failCount && !importResult.errors?.length"
+            class="card-gap"
+            type="warning"
+            :closable="false"
+            show-icon
+            title="没有返回失败明细，请重启后端后重新导入。"
+          />
+          <el-table
+            v-if="importResult.errors?.length"
+            class="card-gap"
+            :data="importResult.errors"
+            size="small"
+            max-height="260"
+            border
+          >
+            <el-table-column label="行号" width="86">
+              <template #default="{ row }">{{ row.rowNo === 0 ? '文件' : row.rowNo }}</template>
+            </el-table-column>
+            <el-table-column prop="errorMessage" label="失败原因" min-width="260" show-overflow-tooltip />
+            <el-table-column label="原始数据" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">{{ formatImportRawData(row.rawData) }}</template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </div>
+
+      <template #footer>
+        <el-button @click="importVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="importing" @click="uploadImport">开始导入</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="dialogVisible"

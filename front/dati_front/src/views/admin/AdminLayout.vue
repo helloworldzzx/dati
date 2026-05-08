@@ -1,16 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import {
-  Collection,
-  DataAnalysis,
-  Document,
-  Files,
-  House,
-  Rank,
-  Upload,
-  User,
-} from '@element-plus/icons-vue'
+import { Collection, DataAnalysis, Document, Files, House, Rank, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -22,7 +13,6 @@ const navItems = [
   { path: '/admin/users', label: '用户管理', icon: User },
   { path: '/admin/categories', label: '题库分类', icon: Collection },
   { path: '/admin/questions', label: '题目管理', icon: Document },
-  { path: '/admin/import', label: '批量导入', icon: Upload },
   { path: '/admin/rankings', label: '排行榜', icon: Rank },
 ]
 

@@ -1,6 +1,7 @@
 package com.example.dati_backend.controller;
 
 import com.example.dati_backend.common.ApiResponse;
+import com.example.dati_backend.dto.QuestionImportResult;
 import com.example.dati_backend.entity.SysUser;
 import com.example.dati_backend.entity.QuestionImportBatch;
 import com.example.dati_backend.service.QuestionImportService;
@@ -30,7 +31,7 @@ public class QuestionImportController {
     }
 
     @PostMapping(value = "/api/admin/questions/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<QuestionImportBatch> importQuestions(
+    public ApiResponse<QuestionImportResult> importQuestions(
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) Long importedBy,
             @AuthenticationPrincipal SysUser currentUser

@@ -29,7 +29,6 @@ const router = createRouter({
         { path: 'users', name: 'admin-users', component: () => import('@/views/admin/AdminUsers.vue') },
         { path: 'categories', name: 'admin-categories', component: () => import('@/views/admin/AdminCategories.vue') },
         { path: 'questions', name: 'admin-questions', component: () => import('@/views/admin/AdminQuestions.vue') },
-        { path: 'import', name: 'admin-import', component: () => import('@/views/admin/AdminImport.vue') },
         { path: 'rankings', name: 'admin-rankings', component: () => import('@/views/admin/AdminRankings.vue') },
       ],
     },
