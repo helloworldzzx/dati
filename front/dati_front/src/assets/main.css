@@ -172,6 +172,37 @@ a {
   gap: 10px;
 }
 
+.table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.badge-success {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.badge-danger {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 420px;
@@ -202,6 +233,27 @@ a {
   line-height: 1.5;
 }
 
+.question-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr)) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.question-table-card {
+  min-width: 0;
+}
+
+.question-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.question-dialog-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .option-list {
   display: grid;
   gap: 10px;
@@ -209,9 +261,33 @@ a {
 
 .option-row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 76px;
+  grid-template-columns: 48px minmax(0, 1fr) 86px 36px;
   gap: 8px;
   align-items: center;
+}
+
+.option-preview {
+  display: flex;
+  max-height: 96px;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow: auto;
+}
+
+.option-preview-item {
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.option-preview-item.correct {
+  background: #dcfce7;
+  color: #047857;
+  font-weight: 800;
 }
 
 .file-box {

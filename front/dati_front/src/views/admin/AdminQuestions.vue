@@ -1,25 +1,32 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { Delete as DeleteIcon, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
+
+const MAX_OPTIONS = 10
 
 const categories = ref([])
 const questions = ref([])
 const selectedId = ref(null)
 const loading = ref(false)
+const dialogVisible = ref(false)
+const dialogLoading = ref(false)
 const saving = ref(false)
 const formRef = ref()
 
 const filters = reactive({
-  categoryId: '',
+  level1Id: '',
+  level2Id: '',
+  level3Id: '',
   type: '',
   status: 'ENABLED',
 })
 
-const optionKeys = ['A', 'B', 'C', 'D', 'E']
 const form = reactive({
-  categoryId: '',
+  level1Id: '',
+  level2Id: '',
+  level3Id: '',
   type: 'SINGLE',
   title: '',
   correctAnswer: '',
@@ -30,24 +37,62 @@ const form = reactive({
 })
 
 const rules = {
-  categoryId: [{ required: true, message: '请选择分类', trigger: 'change' }],
+  level1Id: [{ required: true, message: '请选择一级分类', trigger: 'change' }],
   type: [{ required: true, message: '请选择题型', trigger: 'change' }],
   title: [{ required: true, message: '请输入题干', trigger: 'blur' }],
 }
 
-const categoryOptions = computed(() =>
-  [...categories.value].sort((left, right) => left.level - right.level || left.id - right.id),
+const categoryById = computed(() => new Map(categories.value.map((item) => [item.id, item])))
+const level1Options = computed(() => childrenOf(null, 1))
+const filterCategoryId = computed(() => filters.level3Id || filters.level2Id || filters.level1Id || '')
+const selectedFormCategoryId = computed(() => form.level3Id || form.level2Id || form.level1Id || '')
+const singleCorrectKey = computed(() => form.options.find((option) => option.correct)?.optionKey || '')
+
+watch(
+  () => filters.level1Id,
+  () => {
+    filters.level2Id = ''
+    filters.level3Id = ''
+  },
 )
-const selectedQuestion = computed(() => questions.value.find((item) => item.id === selectedId.value))
+
+watch(
+  () => filters.level2Id,
+  () => {
+    filters.level3Id = ''
+  },
+)
+
+watch(
+  () => form.level1Id,
+  () => {
+    form.level2Id = ''
+    form.level3Id = ''
+  },
+)
+
+watch(
+  () => form.level2Id,
+  () => {
+    form.level3Id = ''
+  },
+)
 
 watch(
   () => form.type,
   (type) => {
-    if ((type === 'SINGLE' || type === 'MULTIPLE') && !form.options.length) {
-      form.options = buildEmptyOptions()
+    if (type === 'SINGLE' || type === 'MULTIPLE') {
+      if (!form.options.length) form.options = buildEmptyOptions()
+      if (type === 'SINGLE') {
+        const firstCorrect = form.options.find((option) => option.correct)
+        form.options.forEach((option) => {
+          option.correct = option === firstCorrect
+        })
+      }
     }
-    if (type === 'JUDGE' && !['TRUE', 'FALSE'].includes(form.correctAnswer)) {
-      form.correctAnswer = 'TRUE'
+    if (type === 'JUDGE') {
+      form.options = []
+      if (!['TRUE', 'FALSE'].includes(form.correctAnswer)) form.correctAnswer = 'TRUE'
     }
     if (type === 'ANALYSIS') {
       form.options = []
@@ -55,17 +100,66 @@ watch(
   },
 )
 
-function buildEmptyOptions() {
-  return optionKeys.map((key, index) => ({
-    optionKey: key,
+function optionKeyByIndex(index) {
+  return String.fromCharCode(65 + index)
+}
+
+function buildEmptyOptions(count = 4) {
+  return Array.from({ length: count }, (_, index) => ({
+    optionKey: optionKeyByIndex(index),
     optionContent: '',
     correct: false,
     sortNo: index,
   }))
 }
 
-function categoryName(id) {
-  return categories.value.find((item) => item.id === id)?.name || '-'
+function normalizeOptions(options = []) {
+  const source = options.length ? options : buildEmptyOptions()
+  return source
+    .slice()
+    .sort((left, right) => (left.sortNo ?? 0) - (right.sortNo ?? 0))
+    .map((option, index) => ({
+      optionKey: option.optionKey || optionKeyByIndex(index),
+      optionContent: option.optionContent || '',
+      correct: Boolean(option.correct),
+      sortNo: index,
+    }))
+}
+
+function childrenOf(parentId, level) {
+  const normalizedParentId = parentId ? Number(parentId) : null
+  return categories.value
+    .filter((item) => {
+      const parentMatched = normalizedParentId === null ? !item.parentId : item.parentId === normalizedParentId
+      return parentMatched && (!level || item.level === level)
+    })
+    .sort((left, right) => (left.sortNo || 0) - (right.sortNo || 0) || left.id - right.id)
+}
+
+function categoryPath(categoryId) {
+  const path = { level1: '-', level2: '-', level3: '-' }
+  const chain = []
+  let current = categoryById.value.get(Number(categoryId))
+  while (current) {
+    chain.unshift(current)
+    current = current.parentId ? categoryById.value.get(current.parentId) : null
+  }
+  chain.forEach((item) => {
+    path[`level${item.level}`] = item.name
+  })
+  return path
+}
+
+function setCategoryLevels(categoryId) {
+  const chain = []
+  let current = categoryById.value.get(Number(categoryId))
+  while (current) {
+    chain.unshift(current)
+    current = current.parentId ? categoryById.value.get(current.parentId) : null
+  }
+  form.level1Id = chain.find((item) => item.level === 1)?.id || ''
+  form.level2Id = chain.find((item) => item.level === 2)?.id || ''
+  form.level3Id = chain.find((item) => item.level === 3)?.id || ''
 }
 
 function typeLabel(type) {
@@ -86,11 +180,26 @@ function typeTag(type) {
   }[type] || 'info'
 }
 
+function statusLabel(status) {
+  return {
+    DRAFT: '草稿',
+    ENABLED: '启用',
+    DISABLED: '禁用',
+  }[status] || status
+}
+
+function formatAnswer(answer) {
+  if (answer === 'TRUE') return '正确'
+  if (answer === 'FALSE') return '错误'
+  return answer || '-'
+}
+
 function resetForm() {
   selectedId.value = null
-  formRef.value?.clearValidate()
   Object.assign(form, {
-    categoryId: categories.value[0]?.id || '',
+    level1Id: '',
+    level2Id: '',
+    level3Id: '',
     type: 'SINGLE',
     title: '',
     correctAnswer: '',
@@ -99,25 +208,64 @@ function resetForm() {
     status: 'ENABLED',
     options: buildEmptyOptions(),
   })
+  nextTick(() => formRef.value?.clearValidate())
+}
+
+function openCreate() {
+  resetForm()
+  dialogVisible.value = true
+}
+
+async function openEdit(question) {
+  selectedId.value = question.id
+  dialogVisible.value = true
+  dialogLoading.value = true
+  try {
+    const detail = await api.questionDetail(question.id)
+    const item = detail.question
+    setCategoryLevels(item.categoryId)
+    Object.assign(form, {
+      type: item.type,
+      title: item.title,
+      correctAnswer: item.correctAnswer || '',
+      analysis: item.analysis || '',
+      sourceFile: item.sourceFile || '',
+      status: item.status || 'ENABLED',
+      options: item.type === 'SINGLE' || item.type === 'MULTIPLE' ? normalizeOptions(detail.options) : [],
+    })
+    await nextTick()
+    formRef.value?.clearValidate()
+  } catch (err) {
+    ElMessage.error(err.message || '加载题目失败')
+  } finally {
+    dialogLoading.value = false
+  }
 }
 
 async function loadCategories() {
   categories.value = await api.categories()
-  if (!form.categoryId && categories.value.length) {
-    form.categoryId = categories.value[0].id
-  }
 }
 
 async function loadQuestions() {
   loading.value = true
   try {
-    questions.value = await api.questions({
-      categoryId: filters.categoryId,
+    const list = await api.questions({
+      categoryId: filterCategoryId.value,
       type: filters.type,
       status: filters.status,
       page: 1,
       size: 100,
     })
+    questions.value = await Promise.all(
+      list.map(async (question) => {
+        try {
+          const detail = await api.questionDetail(question.id)
+          return { ...question, options: detail.options || [] }
+        } catch {
+          return { ...question, options: [] }
+        }
+      }),
+    )
   } catch (err) {
     ElMessage.error(err.message || '加载失败')
   } finally {
@@ -134,70 +282,67 @@ async function loadAll() {
   }
 }
 
-async function edit(question) {
-  selectedId.value = question.id
-  formRef.value?.clearValidate()
-  try {
-    const detail = await api.questionDetail(question.id)
-    const item = detail.question
-    const options = detail.options?.length
-      ? detail.options.map((option, index) => ({
-          optionKey: option.optionKey,
-          optionContent: option.optionContent,
-          correct: Boolean(option.correct),
-          sortNo: option.sortNo ?? index,
-        }))
-      : buildEmptyOptions()
-
-    Object.assign(form, {
-      categoryId: item.categoryId,
-      type: item.type,
-      title: item.title,
-      correctAnswer: item.correctAnswer || '',
-      analysis: item.analysis || '',
-      sourceFile: item.sourceFile || '',
-      status: item.status || 'ENABLED',
-      options: item.type === 'ANALYSIS' ? [] : options,
-    })
-  } catch (err) {
-    ElMessage.error(err.message || '加载题目失败')
-  }
-}
-
 function setSingleCorrect(key) {
   form.options.forEach((option) => {
     option.correct = option.optionKey === key
   })
 }
 
-function buildCorrectAnswer() {
-  if (form.type === 'JUDGE' || form.type === 'ANALYSIS') {
-    return form.correctAnswer
+function addOption() {
+  if (form.options.length >= MAX_OPTIONS) {
+    ElMessage.warning(`最多支持 ${MAX_OPTIONS} 个选项`)
+    return
   }
-  return form.options
-    .filter((option) => option.correct && option.optionContent)
-    .map((option) => option.optionKey)
-    .join(',')
+  form.options.push({
+    optionKey: optionKeyByIndex(form.options.length),
+    optionContent: '',
+    correct: false,
+    sortNo: form.options.length,
+  })
+}
+
+function removeOption(index) {
+  if (form.options.length <= 2) {
+    ElMessage.warning('选择题至少保留 2 个选项')
+    return
+  }
+  form.options.splice(index, 1)
+  form.options.forEach((option, nextIndex) => {
+    option.optionKey = optionKeyByIndex(nextIndex)
+    option.sortNo = nextIndex
+  })
 }
 
 function buildPayload() {
+  const categoryId = selectedFormCategoryId.value
+  if (!categoryId) {
+    throw new Error('请选择分类')
+  }
   const options =
     form.type === 'SINGLE' || form.type === 'MULTIPLE'
       ? form.options
           .filter((option) => option.optionContent.trim())
           .map((option, index) => ({
-            optionKey: option.optionKey,
+            optionKey: optionKeyByIndex(index),
             optionContent: option.optionContent.trim(),
             correct: Boolean(option.correct),
             sortNo: index,
           }))
       : []
 
+  if ((form.type === 'SINGLE' || form.type === 'MULTIPLE') && options.length < 2) {
+    throw new Error('选择题至少需要 2 个选项')
+  }
+  const correctAnswer =
+    form.type === 'SINGLE' || form.type === 'MULTIPLE'
+      ? options.filter((option) => option.correct).map((option) => option.optionKey).join(',')
+      : form.correctAnswer
+
   return {
-    categoryId: Number(form.categoryId),
+    categoryId: Number(categoryId),
     type: form.type,
     title: form.title,
-    correctAnswer: buildCorrectAnswer(),
+    correctAnswer,
     analysis: form.analysis,
     sourceFile: form.sourceFile,
     status: form.status,
@@ -219,8 +364,9 @@ async function save() {
     } else {
       await api.createQuestion(payload)
       ElMessage.success('题目已创建')
-      resetForm()
     }
+    dialogVisible.value = false
+    resetForm()
     await loadQuestions()
   } catch (err) {
     ElMessage.error(err.message || '保存失败')
@@ -239,26 +385,37 @@ onMounted(loadAll)
         <h2 class="page-title">题目管理</h2>
         <p class="page-desc">维护单选、多选、判断和分析题。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="resetForm">新建题目</el-button>
+      <el-button type="primary" :icon="Plus" @click="openCreate">新建题目</el-button>
     </div>
 
     <el-card class="toolbar-card" shadow="never">
-      <div class="toolbar-inline">
-        <el-select v-model="filters.categoryId" clearable placeholder="全部分类" style="width: 220px">
+      <div class="question-filter-grid">
+        <el-select v-model="filters.level1Id" clearable placeholder="一级分类">
+          <el-option v-for="item in level1Options" :key="item.id" :label="item.name" :value="item.id" />
+        </el-select>
+        <el-select v-model="filters.level2Id" clearable :disabled="!filters.level1Id" placeholder="二级分类">
           <el-option
-            v-for="item in categoryOptions"
+            v-for="item in childrenOf(filters.level1Id, 2)"
             :key="item.id"
-            :label="`${'　'.repeat(item.level - 1)}${item.name}`"
+            :label="item.name"
             :value="item.id"
           />
         </el-select>
-        <el-select v-model="filters.type" clearable placeholder="全部题型" style="width: 140px">
+        <el-select v-model="filters.level3Id" clearable :disabled="!filters.level2Id" placeholder="三级分类">
+          <el-option
+            v-for="item in childrenOf(filters.level2Id, 3)"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          />
+        </el-select>
+        <el-select v-model="filters.type" clearable placeholder="全部题型">
           <el-option label="单选" value="SINGLE" />
           <el-option label="多选" value="MULTIPLE" />
           <el-option label="判断" value="JUDGE" />
           <el-option label="分析" value="ANALYSIS" />
         </el-select>
-        <el-select v-model="filters.status" clearable placeholder="全部状态" style="width: 140px">
+        <el-select v-model="filters.status" clearable placeholder="全部状态">
           <el-option label="启用" value="ENABLED" />
           <el-option label="草稿" value="DRAFT" />
           <el-option label="禁用" value="DISABLED" />
@@ -267,70 +424,118 @@ onMounted(loadAll)
       </div>
     </el-card>
 
-    <div class="content-grid">
-      <el-card shadow="never">
-        <template #header>
-          <div class="toolbar-inline" style="justify-content: space-between">
-            <strong>题目列表</strong>
-            <el-button :icon="Refresh" :loading="loading" @click="loadQuestions">刷新</el-button>
-          </div>
-        </template>
+    <el-card class="question-table-card" shadow="never">
+      <template #header>
+        <div class="toolbar-inline" style="justify-content: space-between">
+          <strong>题目列表</strong>
+          <el-button :icon="Refresh" :loading="loading" @click="loadQuestions">刷新</el-button>
+        </div>
+      </template>
 
-        <el-table v-loading="loading" :data="questions" stripe height="620" empty-text="暂无题目">
-          <el-table-column label="题型" width="90">
-            <template #default="{ row }">
-              <el-tag :type="typeTag(row.type)">{{ typeLabel(row.type) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="题干" min-width="320">
-            <template #default="{ row }">
-              <div class="question-title-cell">{{ row.title }}</div>
-            </template>
-          </el-table-column>
-          <el-table-column label="分类" min-width="140">
-            <template #default="{ row }">{{ categoryName(row.categoryId) }}</template>
-          </el-table-column>
-          <el-table-column label="答案" min-width="90">
-            <template #default="{ row }">{{ row.correctAnswer || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.status === 'ENABLED' ? 'success' : 'warning'">{{ row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="100" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
+      <el-table v-loading="loading" :data="questions" stripe height="660" empty-text="暂无题目">
+        <el-table-column label="题型" width="90">
+          <template #default="{ row }">
+            <el-tag :type="typeTag(row.type)">{{ typeLabel(row.type) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="一级分类" min-width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ categoryPath(row.categoryId).level1 }}</template>
+        </el-table-column>
+        <el-table-column label="二级分类" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ categoryPath(row.categoryId).level2 }}</template>
+        </el-table-column>
+        <el-table-column label="三级分类" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ categoryPath(row.categoryId).level3 }}</template>
+        </el-table-column>
+        <el-table-column label="题干" min-width="280">
+          <template #default="{ row }">
+            <div class="question-title-cell">{{ row.title }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="选项" min-width="280">
+          <template #default="{ row }">
+            <div v-if="row.options?.length" class="option-preview">
+              <span
+                v-for="option in row.options"
+                :key="option.id || option.optionKey"
+                :class="['option-preview-item', option.correct ? 'correct' : '']"
+              >
+                {{ option.optionKey }}. {{ option.optionContent }}
+              </span>
+            </div>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="答案" min-width="100">
+          <template #default="{ row }">{{ formatAnswer(row.correctAnswer) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'warning'">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
-      <el-card shadow="never">
-        <template #header>
-          <strong>{{ selectedQuestion ? '编辑题目' : '新建题目' }}</strong>
-        </template>
-
+    <el-dialog
+      v-model="dialogVisible"
+      :title="selectedId ? '编辑题目' : '新建题目'"
+      width="760px"
+      destroy-on-close
+      @closed="resetForm"
+    >
+      <div v-loading="dialogLoading">
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-          <el-form-item label="分类" prop="categoryId">
-            <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%">
-              <el-option
-                v-for="item in categoryOptions"
-                :key="item.id"
-                :label="`${'　'.repeat(item.level - 1)}${item.name}`"
-                :value="item.id"
-              />
-            </el-select>
-          </el-form-item>
+          <div class="question-dialog-grid">
+            <el-form-item label="一级分类" prop="level1Id">
+              <el-select v-model="form.level1Id" placeholder="请选择一级分类" style="width: 100%">
+                <el-option v-for="item in level1Options" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="二级分类">
+              <el-select v-model="form.level2Id" clearable :disabled="!form.level1Id" placeholder="请选择二级分类" style="width: 100%">
+                <el-option
+                  v-for="item in childrenOf(form.level1Id, 2)"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="三级分类">
+              <el-select v-model="form.level3Id" clearable :disabled="!form.level2Id" placeholder="请选择三级分类" style="width: 100%">
+                <el-option
+                  v-for="item in childrenOf(form.level2Id, 3)"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+          </div>
 
-          <el-form-item label="题型" prop="type">
-            <el-select v-model="form.type" style="width: 100%">
-              <el-option label="单选" value="SINGLE" />
-              <el-option label="多选" value="MULTIPLE" />
-              <el-option label="判断" value="JUDGE" />
-              <el-option label="分析" value="ANALYSIS" />
-            </el-select>
-          </el-form-item>
+          <div class="question-dialog-grid two">
+            <el-form-item label="题型" prop="type">
+              <el-select v-model="form.type" style="width: 100%">
+                <el-option label="单选" value="SINGLE" />
+                <el-option label="多选" value="MULTIPLE" />
+                <el-option label="判断" value="JUDGE" />
+                <el-option label="分析" value="ANALYSIS" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="状态">
+              <el-select v-model="form.status" style="width: 100%">
+                <el-option label="启用" value="ENABLED" />
+                <el-option label="草稿" value="DRAFT" />
+                <el-option label="禁用" value="DISABLED" />
+              </el-select>
+            </el-form-item>
+          </div>
 
           <el-form-item label="题干" prop="title">
             <el-input v-model.trim="form.title" type="textarea" :rows="4" />
@@ -338,19 +543,21 @@ onMounted(loadAll)
 
           <el-form-item v-if="form.type === 'SINGLE' || form.type === 'MULTIPLE'" label="选项">
             <div class="option-list">
-              <div v-for="option in form.options" :key="option.optionKey" class="option-row">
+              <div v-for="(option, index) in form.options" :key="option.optionKey" class="option-row">
                 <el-tag>{{ option.optionKey }}</el-tag>
-                <el-input v-model="option.optionContent" />
+                <el-input v-model="option.optionContent" placeholder="请输入选项内容" />
                 <el-radio
                   v-if="form.type === 'SINGLE'"
-                  :model-value="option.correct"
-                  :label="true"
+                  :model-value="singleCorrectKey"
+                  :label="option.optionKey"
                   @change="setSingleCorrect(option.optionKey)"
                 >
                   正确
                 </el-radio>
                 <el-checkbox v-else v-model="option.correct">正确</el-checkbox>
+                <el-button :icon="DeleteIcon" circle plain @click="removeOption(index)" />
               </div>
+              <el-button :icon="Plus" plain @click="addOption">添加选项</el-button>
             </div>
           </el-form-item>
 
@@ -372,18 +579,13 @@ onMounted(loadAll)
           <el-form-item label="来源文件">
             <el-input v-model.trim="form.sourceFile" />
           </el-form-item>
-
-          <el-form-item label="状态">
-            <el-select v-model="form.status" style="width: 100%">
-              <el-option label="启用" value="ENABLED" />
-              <el-option label="草稿" value="DRAFT" />
-              <el-option label="禁用" value="DISABLED" />
-            </el-select>
-          </el-form-item>
-
-          <el-button type="primary" :loading="saving" style="width: 100%" @click="save">保存题目</el-button>
         </el-form>
-      </el-card>
-    </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存题目</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
