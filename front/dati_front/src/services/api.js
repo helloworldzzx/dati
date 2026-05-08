@@ -83,6 +83,11 @@ export function downloadBlob(blob, fileName) {
   URL.revokeObjectURL(url)
 }
 
+function query(params = {}) {
+  const filtered = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  return new URLSearchParams(filtered).toString()
+}
+
 export const api = {
   login: (body) => request('/api/auth/login', { method: 'POST', body }),
   me: () => request('/api/auth/me'),
@@ -100,7 +105,7 @@ export const api = {
   updateCategory: (id, body) => request(`/api/categories/${id}`, { method: 'PUT', body }),
   disableCategory: (id) => request(`/api/categories/${id}/disable`, { method: 'PATCH' }),
 
-  questions: (params = {}) => request(`/api/questions?${new URLSearchParams(params)}`),
+  questions: (params = {}) => request(`/api/questions?${query(params)}`),
   questionDetail: (id) => request(`/api/questions/${id}`),
   createQuestion: (body) => request('/api/admin/questions', { method: 'POST', body }),
   updateQuestion: (id, body) => request(`/api/admin/questions/${id}`, { method: 'PUT', body }),
