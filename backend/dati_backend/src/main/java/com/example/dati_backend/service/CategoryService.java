@@ -86,23 +86,30 @@ public class CategoryService {
         }
 
         Long parentId = normalizeParentId(request.parentId());
-        if (creating || request.parentId() != null) {
+        boolean parentChanged = creating || request.parentId() != null;
+        if (parentChanged) {
             category.setParentId(parentId);
         }
 
         Integer level = request.level();
-        if (parentId != null) {
+        if (parentChanged && parentId != null) {
             QuestionCategory parent = getCategory(parentId);
             level = parent.getLevel() + 1;
-        } else if (level == null) {
+        } else if (parentChanged && level == null) {
             level = 1;
         }
-        if (level < 1 || level > 3) {
-            throw new IllegalArgumentException("Category level must be between 1 and 3");
+        if (level != null) {
+            if (level < 1 || level > 3) {
+                throw new IllegalArgumentException("Category level must be between 1 and 3");
+            }
+            category.setLevel(level);
         }
-        category.setLevel(level);
-        category.setSortNo(request.sortNo() == null ? 0 : request.sortNo());
-        category.setStatus(StringUtils.hasText(request.status()) ? request.status().trim().toUpperCase() : "ENABLED");
+        if (creating || request.sortNo() != null) {
+            category.setSortNo(request.sortNo() == null ? 0 : request.sortNo());
+        }
+        if (creating || StringUtils.hasText(request.status())) {
+            category.setStatus(StringUtils.hasText(request.status()) ? request.status().trim().toUpperCase() : "ENABLED");
+        }
     }
 
     private Long normalizeParentId(Long parentId) {
