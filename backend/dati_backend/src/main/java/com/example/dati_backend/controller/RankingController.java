@@ -15,7 +15,10 @@ public class RankingController {
     private final RankingService rankingService;
 
     @GetMapping("/api/rankings")
-    public ApiResponse<List<RankingItem>> ranking(@RequestParam(defaultValue = "50") Integer limit) {
-        return ApiResponse.ok(rankingService.ranking(limit));
+    public ApiResponse<List<RankingItem>> ranking(
+            @RequestParam(defaultValue = "50") Integer limit,
+            @RequestParam(required = false) String sort
+    ) {
+        return ApiResponse.ok(rankingService.ranking(limit, sort));
     }
 }

@@ -46,7 +46,7 @@ onMounted(load)
         <div>
           <div class="answer-header-title">首页</div>
           <div class="muted" style="font-size: 12px">
-            {{ auth.user?.realName || auth.user?.username || '答题练习' }}
+            欢迎您，{{ auth.user?.realName || auth.user?.username || '答题练习' }}
           </div>
         </div>
       </header>

@@ -13,19 +13,19 @@ const menuItems = [
     title: '错题本',
     desc: '复习曾经答错的题目',
     icon: Collection,
-    to: '/answer/practice?mode=wrong',
+    to: { path: '/answer/practice', query: { mode: 'wrong', return: '/answer/mine' } },
   },
   {
     title: '收藏题',
     desc: '查看主动收藏的题目',
     icon: Star,
-    to: '/answer/practice?mode=favorite',
+    to: { path: '/answer/practice', query: { mode: 'favorite', return: '/answer/mine' } },
   },
   {
     title: '排行榜',
     desc: '查看答题排名',
     icon: Medal,
-    to: '/answer/rankings',
+    to: { path: '/answer/rankings', query: { return: '/answer/mine' } },
   },
 ]
 
@@ -49,8 +49,7 @@ async function logout() {
     <div class="mobile-page">
       <header class="answer-header">
         <div>
-          <div class="answer-header-title">我的</div>
-          <div class="muted" style="font-size: 12px">个人练习中心</div>
+          <div class="answer-header-title">个人中心</div>
         </div>
       </header>
 

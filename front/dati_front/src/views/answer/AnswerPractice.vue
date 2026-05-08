@@ -24,6 +24,12 @@ let saveTimer = null
 
 const mode = computed(() => route.query.mode || 'practice')
 const categoryId = computed(() => (route.query.categoryId ? Number(route.query.categoryId) : null))
+const backTarget = computed(() => {
+  const target = Array.isArray(route.query.return) ? route.query.return[0] : route.query.return
+  if (typeof target === 'string' && target.startsWith('/answer')) return target
+  if (mode.value === 'wrong' || mode.value === 'favorite') return '/answer/mine'
+  return '/answer'
+})
 const pageTitle = computed(() => {
   if (mode.value === 'wrong') return '错题本'
   if (mode.value === 'favorite') return '收藏题'
@@ -291,6 +297,10 @@ function previous() {
   if (currentIndex.value > 0) currentIndex.value -= 1
 }
 
+function goBack() {
+  router.push(backTarget.value)
+}
+
 function next() {
   if (currentIndex.value < questions.value.length - 1) {
     currentIndex.value += 1
@@ -321,7 +331,7 @@ onBeforeUnmount(() => {
       <template v-if="currentQuestion">
         <div class="question-topbar">
           <div class="question-tools">
-            <button class="tree-toggle" type="button" @click="router.push('/answer')">‹</button>
+            <button class="tree-toggle" type="button" @click="goBack">‹</button>
             <strong class="question-page-title">{{ pageTitle }}</strong>
             <el-tag size="small">{{ typeLabel(currentQuestion.type) }}</el-tag>
           </div>
@@ -436,7 +446,7 @@ onBeforeUnmount(() => {
 
       <div v-else class="question-empty">
         <el-empty :description="loading ? '题目加载中' : '暂无题目'">
-          <el-button type="primary" @click="router.push('/answer')">返回首页</el-button>
+          <el-button type="primary" @click="goBack">返回</el-button>
         </el-empty>
       </div>
     </div>

@@ -142,7 +142,7 @@ export const api = {
   deleteQuestion: (id) => request(`/api/admin/questions/${id}`, { method: 'DELETE' }),
   deleteQuestions: (ids) => request('/api/admin/questions/batch-delete', { method: 'POST', body: { ids } }),
 
-  rankings: (limit = 50) => request(`/api/rankings?limit=${limit}`),
+  rankings: (limit = 50, sort) => request(`/api/rankings?${query({ limit, sort })}`),
   startSession: (body) => request('/api/practice/sessions', { method: 'POST', body }),
   finishSession: (sessionId) => request(`/api/practice/sessions/${sessionId}/finish`, { method: 'PATCH' }),
   submitAnswer: (body) => request('/api/practice/answers', { method: 'POST', body }),
