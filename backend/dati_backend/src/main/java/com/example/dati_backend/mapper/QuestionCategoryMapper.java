@@ -34,6 +34,15 @@ public interface QuestionCategoryMapper {
             """)
     List<QuestionCategory> listByParentId(Long parentId);
 
+    @Select("""
+            SELECT id, parent_id, name, level, sort_no, status, created_at, updated_at
+            FROM question_category
+            WHERE parent_id <=> #{parentId}
+              AND name = #{name}
+            LIMIT 1
+            """)
+    QuestionCategory findByParentAndName(@Param("parentId") Long parentId, @Param("name") String name);
+
     @Insert("""
             INSERT INTO question_category (parent_id, name, level, sort_no, status)
             VALUES (#{parentId}, #{name}, #{level}, #{sortNo}, #{status})

@@ -5,10 +5,19 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface QuestionImportBatchMapper {
+
+    @Select("""
+            SELECT id, file_name, total_count, success_count, fail_count,
+                   status, imported_by, created_at, updated_at
+            FROM question_import_batch
+            WHERE id = #{id}
+            """)
+    QuestionImportBatch findById(Long id);
 
     @Insert("""
             INSERT INTO question_import_batch (
