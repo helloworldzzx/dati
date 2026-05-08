@@ -42,6 +42,13 @@ public interface QuestionMapper {
     );
 
     @Select("""
+            SELECT COUNT(*)
+            FROM question
+            WHERE category_id = #{categoryId}
+            """)
+    int countByCategoryId(Long categoryId);
+
+    @Select("""
             SELECT q.id, q.category_id, q.type, q.title, q.correct_answer, q.analysis, q.source_file,
                    q.status, q.answer_count, q.correct_count, q.created_by, q.created_at, q.updated_at
             FROM question q

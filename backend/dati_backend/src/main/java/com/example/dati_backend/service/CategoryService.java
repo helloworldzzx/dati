@@ -3,6 +3,7 @@ package com.example.dati_backend.service;
 import com.example.dati_backend.dto.CategoryRequest;
 import com.example.dati_backend.dto.CategoryTreeNode;
 import com.example.dati_backend.entity.QuestionCategory;
+import com.example.dati_backend.mapper.QuestionMapper;
 import com.example.dati_backend.mapper.QuestionCategoryMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,6 +18,7 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class CategoryService {
     private final QuestionCategoryMapper categoryMapper;
+    private final QuestionMapper questionMapper;
 
     public List<QuestionCategory> listCategories(Long parentId) {
         if (parentId == null || parentId == 0) {
@@ -72,6 +74,18 @@ public class CategoryService {
     public void disableCategory(Long id) {
         getCategory(id);
         categoryMapper.updateStatus(id, "DISABLED");
+    }
+
+    @Transactional
+    public void deleteCategory(Long id) {
+        getCategory(id);
+        if (categoryMapper.countChildren(id) > 0) {
+            throw new IllegalArgumentException("该分类下还有子分类，不能删除");
+        }
+        if (questionMapper.countByCategoryId(id) > 0) {
+            throw new IllegalArgumentException("该分类下还有题目，不能删除");
+        }
+        categoryMapper.deleteById(id);
     }
 
     private void fillCategory(QuestionCategory category, CategoryRequest request, boolean creating) {

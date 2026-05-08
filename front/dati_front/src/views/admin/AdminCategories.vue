@@ -145,6 +145,26 @@ async function disable(category) {
   }
 }
 
+async function remove(category) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除分类 ${category.name}？删除前请确保该分类下没有子分类和题目。`,
+      '删除分类',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+    await api.deleteCategory(category.id)
+    ElMessage.success('分类已删除')
+    if (selectedId.value === category.id) resetForm()
+    await load()
+  } catch (err) {
+    if (err !== 'cancel') ElMessage.error(err.message || '删除失败')
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -174,6 +194,7 @@ onMounted(load)
           @toggle="toggleNode"
           @edit="edit"
           @disable="disable"
+          @delete="remove"
         />
         <el-empty v-else description="暂无分类" />
       </el-card>

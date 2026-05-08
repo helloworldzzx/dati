@@ -52,6 +52,12 @@ const router = createRouter({
       meta: { role: 'USER' },
     },
     {
+      path: '/answer/mine',
+      name: 'answer-mine',
+      component: () => import('@/views/answer/AnswerMine.vue'),
+      meta: { role: 'USER' },
+    },
+    {
       path: '/answer/practice',
       name: 'answer-practice',
       component: () => import('@/views/answer/AnswerPractice.vue'),

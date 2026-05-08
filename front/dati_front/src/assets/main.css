@@ -382,6 +382,10 @@ a {
   padding: 16px;
 }
 
+.answer-content.with-tabbar {
+  padding-bottom: calc(90px + env(safe-area-inset-bottom));
+}
+
 .answer-home-card {
   padding: 16px;
   border: 1px solid #e6ebf2;
@@ -410,6 +414,12 @@ a {
   display: grid;
   gap: 12px;
   margin-top: 14px;
+}
+
+.answer-section-heading {
+  margin: 22px 0 10px;
+  font-size: 18px;
+  font-weight: 900;
 }
 
 .answer-action {
@@ -459,6 +469,90 @@ a {
   display: grid;
   gap: 10px;
   margin-top: 14px;
+}
+
+.mine-profile {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f0f7ff, #f7fff3);
+}
+
+.mine-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #1677ff;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.mine-profile-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.mine-profile-main strong {
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mine-profile-main span {
+  overflow: hidden;
+  color: #667085;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mine-logout {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.answer-tabbar {
+  position: fixed;
+  z-index: 30;
+  bottom: 0;
+  left: 50%;
+  display: grid;
+  width: min(100vw, 430px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 7px 12px calc(7px + env(safe-area-inset-bottom));
+  border-top: 1px solid #e6ebf2;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.08);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.answer-tabbar a {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  border-radius: 8px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.answer-tabbar a.router-link-exact-active {
+  background: #eef6ff;
+  color: #1677ff;
 }
 
 .question-topbar {

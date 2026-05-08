@@ -104,6 +104,7 @@ export const api = {
   createCategory: (body) => request('/api/categories', { method: 'POST', body }),
   updateCategory: (id, body) => request(`/api/categories/${id}`, { method: 'PUT', body }),
   disableCategory: (id) => request(`/api/categories/${id}/disable`, { method: 'PATCH' }),
+  deleteCategory: (id) => request(`/api/categories/${id}`, { method: 'DELETE' }),
 
   questions: (params = {}) => request(`/api/questions?${query(params)}`),
   questionDetail: (id) => request(`/api/questions/${id}`),

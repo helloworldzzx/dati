@@ -2,6 +2,7 @@ package com.example.dati_backend.mapper;
 
 import com.example.dati_backend.entity.QuestionCategory;
 import java.util.List;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -43,6 +44,13 @@ public interface QuestionCategoryMapper {
             """)
     QuestionCategory findByParentAndName(@Param("parentId") Long parentId, @Param("name") String name);
 
+    @Select("""
+            SELECT COUNT(*)
+            FROM question_category
+            WHERE parent_id = #{parentId}
+            """)
+    int countChildren(Long parentId);
+
     @Insert("""
             INSERT INTO question_category (parent_id, name, level, sort_no, status)
             VALUES (#{parentId}, #{name}, #{level}, #{sortNo}, #{status})
@@ -67,4 +75,10 @@ public interface QuestionCategoryMapper {
             WHERE id = #{id}
             """)
     int updateStatus(@Param("id") Long id, @Param("status") String status);
+
+    @Delete("""
+            DELETE FROM question_category
+            WHERE id = #{id}
+            """)
+    int deleteById(Long id);
 }

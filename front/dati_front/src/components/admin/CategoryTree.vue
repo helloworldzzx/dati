@@ -1,5 +1,5 @@
 <script setup>
-import { Edit, SwitchButton } from '@element-plus/icons-vue'
+import { Delete as DeleteIcon, Edit, SwitchButton } from '@element-plus/icons-vue'
 
 defineProps({
   nodes: {
@@ -12,7 +12,7 @@ defineProps({
   },
 })
 
-const emit = defineEmits(['toggle', 'edit', 'disable'])
+const emit = defineEmits(['toggle', 'edit', 'disable', 'delete'])
 
 function hasChildren(node) {
   return Array.isArray(node.children) && node.children.length > 0
@@ -50,6 +50,9 @@ function isExpanded(expandedIds, node) {
           <el-button size="small" type="danger" plain :icon="SwitchButton" @click="emit('disable', node)">
             禁用
           </el-button>
+          <el-button size="small" type="danger" :icon="DeleteIcon" @click="emit('delete', node)">
+            删除
+          </el-button>
         </div>
       </div>
 
@@ -60,6 +63,7 @@ function isExpanded(expandedIds, node) {
           @toggle="emit('toggle', $event)"
           @edit="emit('edit', $event)"
           @disable="emit('disable', $event)"
+          @delete="emit('delete', $event)"
         />
       </div>
     </div>

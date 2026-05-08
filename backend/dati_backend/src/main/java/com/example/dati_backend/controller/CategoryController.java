@@ -6,6 +6,7 @@ import com.example.dati_backend.dto.CategoryTreeNode;
 import com.example.dati_backend.entity.QuestionCategory;
 import com.example.dati_backend.service.CategoryService;
 import java.util.List;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -51,6 +52,12 @@ public class CategoryController {
     @PatchMapping("/{id}/disable")
     public ApiResponse<Void> disableCategory(@PathVariable Long id) {
         categoryService.disableCategory(id);
+        return ApiResponse.ok();
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> deleteCategory(@PathVariable Long id) {
+        categoryService.deleteCategory(id);
         return ApiResponse.ok();
     }
 }
