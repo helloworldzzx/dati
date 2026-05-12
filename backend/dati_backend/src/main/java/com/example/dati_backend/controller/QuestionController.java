@@ -1,6 +1,7 @@
 package com.example.dati_backend.controller;
 
 import com.example.dati_backend.common.ApiResponse;
+import com.example.dati_backend.dto.PageResult;
 import com.example.dati_backend.dto.QuestionBatchDeleteRequest;
 import com.example.dati_backend.dto.QuestionDetailResponse;
 import com.example.dati_backend.dto.QuestionRequest;
@@ -31,6 +32,17 @@ public class QuestionController {
             @RequestParam(defaultValue = "20") Integer size
     ) {
         return ApiResponse.ok(questionService.listQuestions(categoryId, type, status, page, size));
+    }
+
+    @GetMapping("/api/admin/questions")
+    public ApiResponse<PageResult<Question>> pageAdminQuestions(
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "ENABLED") String status,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return ApiResponse.ok(questionService.pageQuestions(categoryId, type, status, page, size));
     }
 
     @GetMapping("/api/questions/{id}")

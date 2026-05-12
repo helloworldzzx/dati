@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 const AUTH_KEYS = {
   admin: {
     token: 'dati_admin_auth_token',
@@ -121,7 +121,7 @@ export const api = {
   completeFirstLogin: (body) => request('/api/auth/complete-first-login', { method: 'POST', body }),
   changePassword: (body) => request('/api/auth/change-password', { method: 'POST', body }),
 
-  users: () => request('/api/admin/users'),
+  users: (params = {}) => request(`/api/admin/users?${query(params)}`),
   createUser: (body) => request('/api/admin/users', { method: 'POST', body }),
   updateUser: (id, body) => request(`/api/admin/users/${id}`, { method: 'PUT', body }),
   disableUser: (id) => request(`/api/admin/users/${id}/disable`, { method: 'PATCH' }),
@@ -136,6 +136,7 @@ export const api = {
   deleteCategory: (id) => request(`/api/categories/${id}`, { method: 'DELETE' }),
 
   questions: (params = {}) => request(`/api/questions?${query(params)}`),
+  adminQuestions: (params = {}) => request(`/api/admin/questions?${query(params)}`),
   questionDetail: (id, userId) => request(`/api/questions/${id}${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
   createQuestion: (body) => request('/api/admin/questions', { method: 'POST', body }),
   updateQuestion: (id, body) => request(`/api/admin/questions/${id}`, { method: 'PUT', body }),
@@ -143,6 +144,7 @@ export const api = {
   deleteQuestions: (ids) => request('/api/admin/questions/batch-delete', { method: 'POST', body: { ids } }),
 
   rankings: (limit = 50, sort) => request(`/api/rankings?${query({ limit, sort })}`),
+  adminRankings: (params = {}) => request(`/api/admin/rankings?${query(params)}`),
   startSession: (body) => request('/api/practice/sessions', { method: 'POST', body }),
   finishSession: (sessionId) => request(`/api/practice/sessions/${sessionId}/finish`, { method: 'PATCH' }),
   submitAnswer: (body) => request('/api/practice/answers', { method: 'POST', body }),

@@ -15,6 +15,11 @@ const importing = ref(false)
 const importFile = ref(null)
 const importResult = ref(null)
 const formRef = ref()
+const pagination = reactive({
+  page: 1,
+  size: 20,
+  total: 0,
+})
 
 const form = reactive({
   username: '',
@@ -82,12 +87,30 @@ function edit(user) {
 async function load() {
   loading.value = true
   try {
-    users.value = await api.users()
+    const result = await api.users({
+      page: pagination.page,
+      size: pagination.size,
+    })
+    users.value = result.records || []
+    pagination.total = result.total || 0
+    pagination.page = result.page || pagination.page
+    pagination.size = result.size || pagination.size
   } catch (err) {
     ElMessage.error(err.message || '加载失败')
   } finally {
     loading.value = false
   }
+}
+
+function handlePageChange(page) {
+  pagination.page = page
+  load()
+}
+
+function handleSizeChange(size) {
+  pagination.size = size
+  pagination.page = 1
+  load()
 }
 
 async function save() {
@@ -248,6 +271,19 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="table-pagination">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          background
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </el-card>
 
     <el-dialog

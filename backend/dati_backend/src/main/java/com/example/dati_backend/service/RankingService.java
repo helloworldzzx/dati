@@ -1,6 +1,7 @@
 package com.example.dati_backend.service;
 
 import com.example.dati_backend.dto.RankingItem;
+import com.example.dati_backend.dto.PageResult;
 import com.example.dati_backend.mapper.UserAnswerStatMapper;
 import java.util.List;
 import java.util.Locale;
@@ -24,6 +25,17 @@ public class RankingService {
             case "accuracy" -> userAnswerStatMapper.listRankingByAccuracy(safeLimit);
             default -> userAnswerStatMapper.listRanking(safeLimit);
         };
+    }
+
+    public PageResult<RankingItem> pageRanking(Integer page, Integer size) {
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 20 : Math.min(size, 200);
+        return new PageResult<>(
+                userAnswerStatMapper.listRankingPage(safeSize, (safePage - 1) * safeSize),
+                userAnswerStatMapper.countRanking(),
+                safePage,
+                safeSize
+        );
     }
 
     private String normalizeSort(String sort) {

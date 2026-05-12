@@ -17,15 +17,15 @@ async function load() {
   loading.value = true
   try {
     const [users, categories, questions, rank] = await Promise.all([
-      api.users(),
+      api.users({ page: 1, size: 1 }),
       api.categories(),
-      api.questions({ page: 1, size: 100, status: 'ENABLED' }),
+      api.adminQuestions({ page: 1, size: 1, status: 'ENABLED' }),
       api.rankings(10),
     ])
     stats.value = {
-      users: users.length,
+      users: users.total || 0,
       categories: categories.length,
-      questions: questions.length,
+      questions: questions.total || 0,
       rankingUsers: rank.length,
     }
     rankings.value = rank.slice(0, 5)

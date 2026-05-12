@@ -21,6 +21,11 @@ const importFile = ref(null)
 const importResult = ref(null)
 const selectedQuestionIds = ref([])
 const formRef = ref()
+const pagination = reactive({
+  page: 1,
+  size: 20,
+  total: 0,
+})
 
 const templateNames = {
   choice: 'choice-question-import-template.xlsx',
@@ -283,13 +288,17 @@ async function loadCategories() {
 async function loadQuestions() {
   loading.value = true
   try {
-    const list = await api.questions({
+    const result = await api.adminQuestions({
       categoryId: filterCategoryId.value,
       type: filters.type,
       status: filters.status,
-      page: 1,
-      size: 100,
+      page: pagination.page,
+      size: pagination.size,
     })
+    const list = result.records || []
+    pagination.total = result.total || 0
+    pagination.page = result.page || pagination.page
+    pagination.size = result.size || pagination.size
     questions.value = await Promise.all(
       list.map(async (question) => {
         try {
@@ -306,6 +315,22 @@ async function loadQuestions() {
   } finally {
     loading.value = false
   }
+}
+
+function searchQuestions() {
+  pagination.page = 1
+  loadQuestions()
+}
+
+function handlePageChange(page) {
+  pagination.page = page
+  loadQuestions()
+}
+
+function handleSizeChange(size) {
+  pagination.size = size
+  pagination.page = 1
+  loadQuestions()
 }
 
 function handleSelectionChange(rows) {
@@ -573,7 +598,7 @@ onMounted(loadAll)
           <el-option label="草稿" value="DRAFT" />
           <el-option label="禁用" value="DISABLED" />
         </el-select>
-        <el-button type="primary" :icon="Search" :loading="loading" @click="loadQuestions">查询</el-button>
+        <el-button type="primary" :icon="Search" :loading="loading" @click="searchQuestions">查询</el-button>
       </div>
     </el-card>
 
@@ -663,6 +688,19 @@ onMounted(loadAll)
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="table-pagination">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          background
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </el-card>
 
     <el-dialog v-model="importVisible" title="批量导入题目" width="680px">

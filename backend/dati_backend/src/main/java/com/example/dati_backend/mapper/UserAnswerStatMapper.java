@@ -54,6 +54,35 @@ public interface UserAnswerStatMapper {
             FROM user_answer_stat s
             INNER JOIN sys_user u ON u.id = s.user_id
             WHERE u.status = 'ENABLED'
+            ORDER BY s.correct_count DESC,
+                     s.answer_count DESC,
+                     s.accuracy_rate DESC,
+                     s.last_answered_at ASC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    List<RankingItem> listRankingPage(@Param("limit") int limit, @Param("offset") int offset);
+
+    @Select("""
+            SELECT COUNT(*)
+            FROM user_answer_stat s
+            INNER JOIN sys_user u ON u.id = s.user_id
+            WHERE u.status = 'ENABLED'
+            """)
+    long countRanking();
+
+    @Select("""
+            SELECT s.user_id AS userId,
+                   u.username AS username,
+                   u.real_name AS realName,
+                   s.answer_count AS answerCount,
+                   s.correct_count AS correctCount,
+                   s.wrong_count AS wrongCount,
+                   s.accuracy_rate AS accuracyRate,
+                   s.total_duration_seconds AS totalDurationSeconds,
+                   s.last_answered_at AS lastAnsweredAt
+            FROM user_answer_stat s
+            INNER JOIN sys_user u ON u.id = s.user_id
+            WHERE u.status = 'ENABLED'
             ORDER BY s.answer_count DESC,
                      s.accuracy_rate DESC,
                      s.correct_count DESC,

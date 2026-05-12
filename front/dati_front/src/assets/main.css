@@ -17,6 +17,7 @@ html,
 body,
 #app {
   width: 100%;
+  height: 100%;
   min-height: 100vh;
 }
 
@@ -66,14 +67,24 @@ a {
 
 .admin-layout {
   min-width: 1180px;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .admin-aside {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   flex-direction: column;
+  overflow: hidden;
   background: var(--app-sidebar);
+}
+
+.admin-layout > .el-container {
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .admin-brand {
@@ -107,6 +118,7 @@ a {
 
 .admin-header {
   display: flex;
+  flex: 0 0 64px;
   align-items: center;
   justify-content: space-between;
   height: 64px;
@@ -140,7 +152,48 @@ a {
 }
 
 .admin-main {
+  height: calc(100vh - 64px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 24px 28px 36px;
+}
+
+.admin-list-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-list-page .page-head,
+.admin-list-page .toolbar-card {
+  flex: 0 0 auto;
+}
+
+.admin-list-card {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.admin-list-card > .el-card__header {
+  flex: 0 0 auto;
+}
+
+.admin-list-card > .el-card__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-fill-table {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .page-head {
@@ -177,6 +230,20 @@ a {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.table-pagination {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid #eef0f3;
+  margin-top: 12px;
+}
+
+.admin-scroll-dialog .el-dialog__body {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
 }
 
 .badge {
@@ -1181,7 +1248,7 @@ a {
 .page-turn-next-leave-active,
 .page-turn-prev-enter-active,
 .page-turn-prev-leave-active {
-  transition: transform 0.26s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.22s ease;
+  transition: transform 0.2s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.22s ease;
 }
 
 .page-turn-next-enter-from {

@@ -3,6 +3,7 @@ package com.example.dati_backend.service;
 import com.example.dati_backend.dto.UserImportError;
 import com.example.dati_backend.dto.UserImportResult;
 import com.example.dati_backend.dto.UserRequest;
+import com.example.dati_backend.dto.PageResult;
 import com.example.dati_backend.entity.SysUser;
 import com.example.dati_backend.mapper.SysUserMapper;
 import java.io.ByteArrayOutputStream;
@@ -37,6 +38,17 @@ public class UserService {
 
     public List<SysUser> listUsers() {
         return userMapper.listAll();
+    }
+
+    public PageResult<SysUser> pageUsers(Integer page, Integer size) {
+        int safePage = safePage(page);
+        int safeSize = safeSize(size);
+        return new PageResult<>(
+                userMapper.listPage(safeSize, (safePage - 1) * safeSize),
+                userMapper.countAll(),
+                safePage,
+                safeSize
+        );
     }
 
     public SysUser getUser(Long id) {
@@ -325,6 +337,14 @@ public class UserService {
 
     private String defaultText(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
+    }
+
+    private int safePage(Integer page) {
+        return page == null || page < 1 ? 1 : page;
+    }
+
+    private int safeSize(Integer size) {
+        return size == null || size < 1 ? 20 : Math.min(size, 200);
     }
 
     private static class HeaderMap {

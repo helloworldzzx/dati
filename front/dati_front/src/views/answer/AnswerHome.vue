@@ -124,7 +124,7 @@ onMounted(load)
                 </span>
                 <span class="category-tree-main">
                   <strong>{{ data.name }}</strong>
-                  <span>{{ statusText(data) }}</span>
+                  <!-- <span>{{ statusText(data) }}</span> -->
                 </span>
                 <button
                   v-if="canPractice(data)"

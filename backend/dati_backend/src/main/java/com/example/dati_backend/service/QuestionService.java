@@ -1,6 +1,7 @@
 package com.example.dati_backend.service;
 
 import com.example.dati_backend.dto.QuestionDetailResponse;
+import com.example.dati_backend.dto.PageResult;
 import com.example.dati_backend.dto.QuestionOptionRequest;
 import com.example.dati_backend.dto.QuestionRequest;
 import com.example.dati_backend.entity.Question;
@@ -50,6 +51,19 @@ public class QuestionService {
         int safePage = page == null || page < 1 ? 1 : page;
         int safeSize = size == null || size < 1 ? 20 : Math.min(size, 2000);
         return questionMapper.list(categoryId, trimToNull(type), trimToNull(status), safeSize, (safePage - 1) * safeSize);
+    }
+
+    public PageResult<Question> pageQuestions(Long categoryId, String type, String status, Integer page, Integer size) {
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 20 : Math.min(size, 200);
+        String safeType = trimToNull(type);
+        String safeStatus = trimToNull(status);
+        return new PageResult<>(
+                questionMapper.list(categoryId, safeType, safeStatus, safeSize, (safePage - 1) * safeSize),
+                questionMapper.count(categoryId, safeType, safeStatus),
+                safePage,
+                safeSize
+        );
     }
 
     public List<Question> listWrongQuestions(Long userId) {

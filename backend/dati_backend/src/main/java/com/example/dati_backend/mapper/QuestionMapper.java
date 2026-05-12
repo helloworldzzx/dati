@@ -43,6 +43,22 @@ public interface QuestionMapper {
     );
 
     @Select("""
+            <script>
+            SELECT COUNT(*)
+            FROM question
+            WHERE 1 = 1
+              <if test="categoryId != null">AND category_id = #{categoryId}</if>
+              <if test="type != null and type != ''">AND type = #{type}</if>
+              <if test="status != null and status != ''">AND status = #{status}</if>
+            </script>
+            """)
+    long count(
+            @Param("categoryId") Long categoryId,
+            @Param("type") String type,
+            @Param("status") String status
+    );
+
+    @Select("""
             SELECT COUNT(*)
             FROM question
             WHERE category_id = #{categoryId}

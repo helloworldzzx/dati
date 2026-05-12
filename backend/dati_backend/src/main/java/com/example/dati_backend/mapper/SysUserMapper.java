@@ -24,6 +24,18 @@ public interface SysUserMapper {
             SELECT id, username, phone, password_hash, real_name, role, status,
                    must_change_password, created_at, updated_at
             FROM sys_user
+            ORDER BY id DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    List<SysUser> listPage(@Param("limit") int limit, @Param("offset") int offset);
+
+    @Select("SELECT COUNT(*) FROM sys_user")
+    long countAll();
+
+    @Select("""
+            SELECT id, username, phone, password_hash, real_name, role, status,
+                   must_change_password, created_at, updated_at
+            FROM sys_user
             WHERE id = #{id}
             """)
     SysUser findById(Long id);

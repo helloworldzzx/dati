@@ -1,11 +1,11 @@
 package com.example.dati_backend.controller;
 
 import com.example.dati_backend.common.ApiResponse;
+import com.example.dati_backend.dto.PageResult;
 import com.example.dati_backend.dto.UserImportResult;
 import com.example.dati_backend.dto.UserRequest;
 import com.example.dati_backend.entity.SysUser;
 import com.example.dati_backend.service.UserService;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -29,8 +29,11 @@ public class AdminUserController {
     private final UserService userService;
 
     @GetMapping
-    public ApiResponse<List<SysUser>> listUsers() {
-        return ApiResponse.ok(userService.listUsers());
+    public ApiResponse<PageResult<SysUser>> listUsers(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return ApiResponse.ok(userService.pageUsers(page, size));
     }
 
     @GetMapping("/{id}")
