@@ -1333,6 +1333,9 @@ a {
 }
 
 .option-mobile {
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
   display: grid;
   grid-template-columns: 42px 1fr;
   gap: 12px;
@@ -1341,7 +1344,25 @@ a {
   border: 0;
   background: transparent;
   color: #303440;
+  outline: none;
   text-align: left;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.option-mobile *,
+.option-mobile:active,
+.option-mobile:focus,
+.option-mobile:focus-visible {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.option-mobile:active,
+.option-mobile:focus,
+.option-mobile:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  outline: none;
 }
 
 .option-key {
