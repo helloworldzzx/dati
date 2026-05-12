@@ -210,7 +210,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="admin-list-page">
     <div class="page-head">
       <div>
         <h2 class="page-title">题库分类</h2>

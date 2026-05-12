@@ -544,7 +544,7 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div>
+  <div class="admin-list-page">
     <div class="page-head">
       <div>
         <h2 class="page-title">题目管理</h2>
@@ -602,7 +602,7 @@ onMounted(loadAll)
       </div>
     </el-card>
 
-    <el-card class="question-table-card" shadow="never">
+    <el-card class="question-table-card admin-list-card" shadow="never">
       <template #header>
         <div class="toolbar-inline" style="justify-content: space-between">
           <strong>题目列表</strong>
@@ -625,8 +625,9 @@ onMounted(loadAll)
       <el-table
         v-loading="loading"
         :data="questions"
+        class="admin-fill-table"
         stripe
-        height="660"
+        height="100%"
         empty-text="暂无题目"
         @selection-change="handleSelectionChange"
       >
@@ -703,7 +704,7 @@ onMounted(loadAll)
       </div>
     </el-card>
 
-    <el-dialog v-model="importVisible" title="批量导入题目" width="680px">
+    <el-dialog v-model="importVisible" class="admin-scroll-dialog" title="批量导入题目" width="680px">
       <div class="file-box">
         <el-alert type="info" :closable="false" show-icon>
           请先下载对应模板填写题目。选择题选项可写在一个单元格内，支持不固定数量的选项。
@@ -788,6 +789,7 @@ onMounted(loadAll)
 
     <el-dialog
       v-model="dialogVisible"
+      class="admin-scroll-dialog"
       :title="selectedId ? '编辑题目' : '新建题目'"
       width="760px"
       destroy-on-close

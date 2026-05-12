@@ -159,6 +159,15 @@ a {
   padding: 24px 28px 36px;
 }
 
+.admin-main > div {
+  height: 100%;
+  min-height: 0;
+}
+
+.admin-main > div:not(.admin-list-page) {
+  overflow: auto;
+}
+
 .admin-list-page {
   display: flex;
   height: 100%;
@@ -275,6 +284,29 @@ a {
   grid-template-columns: minmax(0, 1fr) 420px;
   gap: 16px;
   align-items: start;
+}
+
+.admin-list-page > .content-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.admin-list-page > .content-grid > .el-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.admin-list-page > .content-grid > .el-card > .el-card__header {
+  flex: 0 0 auto;
+}
+
+.admin-list-page > .content-grid > .el-card > .el-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .stat-grid {

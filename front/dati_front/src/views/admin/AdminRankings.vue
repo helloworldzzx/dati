@@ -50,7 +50,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="admin-list-page">
     <div class="page-head">
       <div>
         <h2 class="page-title">排行榜</h2>
@@ -59,8 +59,8 @@ onMounted(load)
       <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
     </div>
 
-    <el-card shadow="never">
-      <el-table v-loading="loading" :data="rankings" stripe height="680" empty-text="暂无排行数据">
+    <el-card class="admin-list-card" shadow="never">
+      <el-table v-loading="loading" class="admin-fill-table" :data="rankings" stripe height="100%" empty-text="暂无排行数据">
         <el-table-column label="名次" width="80">
           <template #default="{ $index }">{{ (pagination.page - 1) * pagination.size + $index + 1 }}</template>
         </el-table-column>

@@ -209,7 +209,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="admin-list-page">
     <div class="page-head">
       <div>
         <h2 class="page-title">用户管理</h2>
@@ -222,7 +222,7 @@ onMounted(load)
       </div>
     </div>
 
-    <el-card shadow="never">
+    <el-card class="admin-list-card" shadow="never">
       <template #header>
         <div class="toolbar-inline" style="justify-content: space-between">
           <strong>用户列表</strong>
@@ -230,7 +230,7 @@ onMounted(load)
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="users" stripe height="660" empty-text="暂无用户">
+      <el-table v-loading="loading" class="admin-fill-table" :data="users" stripe height="100%" empty-text="暂无用户">
         <el-table-column prop="username" label="账号" min-width="130" />
         <el-table-column label="姓名" min-width="120">
           <template #default="{ row }">{{ row.realName || '-' }}</template>
@@ -288,6 +288,7 @@ onMounted(load)
 
     <el-dialog
       v-model="userDialogVisible"
+      class="admin-scroll-dialog"
       :title="selectedUser ? '编辑用户' : '新建用户'"
       width="560px"
       destroy-on-close
@@ -331,7 +332,7 @@ onMounted(load)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importVisible" title="Excel 导入用户" width="620px">
+    <el-dialog v-model="importVisible" class="admin-scroll-dialog" title="Excel 导入用户" width="620px">
       <div class="file-box">
         <el-alert type="info" :closable="false" show-icon>
           请先下载模板填写用户信息。账号必填，初始密码为空时默认 123456。
