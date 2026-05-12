@@ -1280,7 +1280,7 @@ a {
 .page-turn-next-leave-active,
 .page-turn-prev-enter-active,
 .page-turn-prev-leave-active {
-  transition: transform 0.2s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.22s ease;
+  transition: transform 0.1s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.22s ease;
 }
 
 .page-turn-next-enter-from {
@@ -1374,7 +1374,9 @@ a {
   border: 1px solid #e1e5eb;
   border-radius: 50%;
   color: #8a93a3;
+  font-size: 15px;
   font-weight: 800;
+  line-height: 1;
 }
 
 .option-mobile.selected .option-key {
@@ -1389,10 +1391,18 @@ a {
   color: #ffffff;
 }
 
+.option-mobile.correct .option-text {
+  color: #13c56b;
+}
+
 .option-mobile.wrong .option-key {
   border-color: #ff4d4f;
   background: #ff4d4f;
   color: #ffffff;
+}
+
+.option-mobile.wrong .option-text {
+  color: #ff4d4f;
 }
 
 .option-text {

@@ -352,7 +352,7 @@ function toggleOption(option) {
     return
   }
   selectedAnswers.value = [key]
-  submit()
+  submitAnswer(key, { optimistic: true })
 }
 
 function optionClass(option) {
@@ -365,6 +365,19 @@ function optionClass(option) {
   if (submitted.value && correctKeys.includes(key)) classes.push('correct')
   if (submitted.value && selected && !correctKeys.includes(key)) classes.push('wrong')
   return classes
+}
+
+function optionKeyLabel(option) {
+  const key = option.optionKey
+  if (key === 'TRUE') return '对'
+  if (key === 'FALSE') return '错'
+  if (currentQuestion.value?.type !== 'SINGLE' || !submitted.value) return key
+
+  const selected = selectedAnswers.value.includes(key) || currentRecord.value?.userAnswer?.split(',').includes(key)
+  if (!selected) return key
+
+  const correctKeys = splitAnswer(currentQuestion.value?.correctAnswer)
+  return correctKeys.includes(key) ? '✓' : '×'
 }
 
 function splitAnswer(value) {
@@ -381,38 +394,61 @@ function currentAnswer() {
   return selectedAnswers.value.join(',')
 }
 
+function judgeCurrentAnswer(answer) {
+  if (!currentQuestion.value || currentQuestion.value.type === 'ANALYSIS') return null
+  const correctAnswer = splitAnswer(currentQuestion.value.correctAnswer).sort().join(',')
+  const userAnswer = splitAnswer(answer).sort().join(',')
+  if (!correctAnswer) return null
+  return correctAnswer === userAnswer
+}
+
 function answerLabel(answer) {
   if (answer === 'TRUE') return '正确'
   if (answer === 'FALSE') return '错误'
   return answer || '-'
 }
 
-async function submit() {
-  if (!currentQuestion.value || submitted.value) return
-  const answer = currentAnswer()
+async function submitAnswer(answer, options = {}) {
+  if (!currentQuestion.value) return
   if (!answer) {
     ElMessage.warning('请先作答')
     return
+  }
+
+  const questionId = currentQuestion.value.id
+  if (options.optimistic) {
+    records[questionId] = {
+      submitted: true,
+      userAnswer: answer,
+      correct: judgeCurrentAnswer(answer),
+    }
+    delete drafts[questionId]
+    saveProgressNow()
   }
 
   try {
     const record = await api.submitAnswer({
       sessionId: null,
       userId: auth.user.id,
-      questionId: currentQuestion.value.id,
+      questionId,
       userAnswer: answer,
       durationSeconds: 0,
     })
-    records[currentQuestion.value.id] = {
+    records[questionId] = {
       submitted: true,
       userAnswer: answer,
       correct: record.correct,
     }
-    delete drafts[currentQuestion.value.id]
+    delete drafts[questionId]
     await saveProgressNow()
   } catch (err) {
     ElMessage.error(err.message || '提交失败')
   }
+}
+
+async function submit() {
+  if (!currentQuestion.value || submitted.value) return
+  await submitAnswer(currentAnswer())
 }
 
 async function toggleFavorite() {
@@ -553,7 +589,7 @@ onBeforeUnmount(() => {
                   @click="toggleOption(option)"
                 >
                   <span class="option-key">
-                    {{ option.optionKey === 'TRUE' ? '对' : option.optionKey === 'FALSE' ? '错' : option.optionKey }}
+                    {{ optionKeyLabel(option) }}
                   </span>
                   <span class="option-text">{{ option.optionContent }}</span>
                 </button>
