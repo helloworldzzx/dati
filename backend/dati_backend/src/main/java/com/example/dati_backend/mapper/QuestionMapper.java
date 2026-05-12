@@ -74,8 +74,13 @@ public interface QuestionMapper {
               AND s.wrong_count > 0
               AND q.status = 'ENABLED'
             ORDER BY s.last_answered_at DESC, q.id DESC
+            LIMIT #{limit} OFFSET #{offset}
             """)
-    List<Question> listWrongByUser(Long userId);
+    List<Question> listWrongByUser(
+            @Param("userId") Long userId,
+            @Param("limit") int limit,
+            @Param("offset") int offset
+    );
 
     @Select("""
             SELECT q.id, q.category_id, q.type, q.title, q.correct_answer, q.analysis, q.source_file,
@@ -86,8 +91,13 @@ public interface QuestionMapper {
               AND s.is_favorite = TRUE
               AND q.status = 'ENABLED'
             ORDER BY s.favorite_at DESC, q.id DESC
+            LIMIT #{limit} OFFSET #{offset}
             """)
-    List<Question> listFavoriteByUser(Long userId);
+    List<Question> listFavoriteByUser(
+            @Param("userId") Long userId,
+            @Param("limit") int limit,
+            @Param("offset") int offset
+    );
 
     @Insert("""
             INSERT INTO question (

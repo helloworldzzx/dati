@@ -66,12 +66,16 @@ public class QuestionService {
         );
     }
 
-    public List<Question> listWrongQuestions(Long userId) {
-        return questionMapper.listWrongByUser(userId);
+    public List<Question> listWrongQuestions(Long userId, Integer page, Integer size) {
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 10 : Math.min(size, 100);
+        return questionMapper.listWrongByUser(userId, safeSize, (safePage - 1) * safeSize);
     }
 
-    public List<Question> listFavoriteQuestions(Long userId) {
-        return questionMapper.listFavoriteByUser(userId);
+    public List<Question> listFavoriteQuestions(Long userId, Integer page, Integer size) {
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 10 : Math.min(size, 100);
+        return questionMapper.listFavoriteByUser(userId, safeSize, (safePage - 1) * safeSize);
     }
 
     @Transactional

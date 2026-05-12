@@ -46,13 +46,21 @@ public class PracticeController {
     }
 
     @GetMapping("/api/users/{userId}/wrong-questions")
-    public ApiResponse<List<Question>> wrongQuestions(@PathVariable Long userId) {
-        return ApiResponse.ok(questionService.listWrongQuestions(userId));
+    public ApiResponse<List<Question>> wrongQuestions(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size
+    ) {
+        return ApiResponse.ok(questionService.listWrongQuestions(userId, page, size));
     }
 
     @GetMapping("/api/users/{userId}/favorite-questions")
-    public ApiResponse<List<Question>> favoriteQuestions(@PathVariable Long userId) {
-        return ApiResponse.ok(questionService.listFavoriteQuestions(userId));
+    public ApiResponse<List<Question>> favoriteQuestions(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size
+    ) {
+        return ApiResponse.ok(questionService.listFavoriteQuestions(userId, page, size));
     }
 
     @GetMapping("/api/users/{userId}/practice-progress")

@@ -148,8 +148,8 @@ export const api = {
   startSession: (body) => request('/api/practice/sessions', { method: 'POST', body }),
   finishSession: (sessionId) => request(`/api/practice/sessions/${sessionId}/finish`, { method: 'PATCH' }),
   submitAnswer: (body) => request('/api/practice/answers', { method: 'POST', body }),
-  wrongQuestions: (userId) => request(`/api/users/${userId}/wrong-questions`),
-  favoriteQuestions: (userId) => request(`/api/users/${userId}/favorite-questions`),
+  wrongQuestions: (userId, params = {}) => request(`/api/users/${userId}/wrong-questions?${query(params)}`),
+  favoriteQuestions: (userId, params = {}) => request(`/api/users/${userId}/favorite-questions?${query(params)}`),
   practiceProgress: (userId, params = {}) => request(`/api/users/${userId}/practice-progress?${query(params)}`),
   savePracticeProgress: (userId, body) =>
     request(`/api/users/${userId}/practice-progress`, {

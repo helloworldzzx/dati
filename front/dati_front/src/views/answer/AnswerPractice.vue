@@ -10,8 +10,16 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
+const QUESTION_BATCH_SIZE = 10
+const PREFETCH_REMAINING = 3
 const loading = ref(false)
-const questions = ref([])
+const questionCache = ref(new Map())
+const loadedPages = ref(new Set())
+const loadingPages = ref(new Set())
+const hasMoreQuestions = ref(true)
+const totalKnownCount = ref(null)
+const restoringProgress = ref(false)
+const pageRequests = new Map()
 const currentIndex = ref(0)
 const currentDetail = ref(null)
 const selectedAnswers = ref([])
@@ -44,7 +52,15 @@ const pageTitle = computed(() => {
   if (mode.value === 'favorite') return '收藏题'
   return route.query.title || '答题练习'
 })
+const currentQuestionSummary = computed(() => questionCache.value.get(currentIndex.value))
 const currentQuestion = computed(() => currentDetail.value?.question)
+const loadedQuestionCount = computed(() => questionCache.value.size)
+const counterText = computed(() => {
+  const minimumVisibleCount = Math.max(loadedQuestionCount.value, currentIndex.value + 1)
+  const totalText = totalKnownCount.value === null ? `${minimumVisibleCount}+` : totalKnownCount.value
+  return `${currentIndex.value + 1}/${totalText}`
+})
+const nextDisabled = computed(() => !hasMoreQuestions.value && !questionCache.value.has(currentIndex.value + 1))
 const options = computed(() => {
   if (!currentQuestion.value) return []
   if (currentQuestion.value.type === 'JUDGE' && !currentDetail.value?.options?.length) {
@@ -66,7 +82,10 @@ const showManualSubmit = computed(() => {
 })
 
 watch(currentIndex, async () => {
+  if (restoringProgress.value) return
+  await ensureQuestionAt(currentIndex.value)
   await loadCurrentDetail()
+  prefetchAround(currentIndex.value)
   await saveProgressNow()
 })
 
@@ -94,6 +113,111 @@ function replaceReactiveObject(target, source) {
   Object.assign(target, source || {})
 }
 
+function resetQuestionBuffer() {
+  questionCache.value = new Map()
+  loadedPages.value = new Set()
+  loadingPages.value = new Set()
+  hasMoreQuestions.value = true
+  totalKnownCount.value = null
+  pageRequests.clear()
+}
+
+function pageForIndex(index) {
+  return Math.floor(Math.max(index, 0) / QUESTION_BATCH_SIZE) + 1
+}
+
+function setWithCopy(setRef, value, enabled) {
+  const next = new Set(setRef.value)
+  if (enabled) next.add(value)
+  else next.delete(value)
+  setRef.value = next
+}
+
+function trimQuestionBuffer(centerIndex = currentIndex.value) {
+  const centerPage = pageForIndex(centerIndex)
+  const keepPages = new Set([centerPage - 1, centerPage, centerPage + 1].filter((page) => page >= 1))
+  const nextCache = new Map()
+
+  questionCache.value.forEach((question, index) => {
+    if (keepPages.has(pageForIndex(index))) nextCache.set(index, question)
+  })
+  questionCache.value = nextCache
+  loadedPages.value = new Set([...loadedPages.value].filter((page) => keepPages.has(page)))
+}
+
+async function fetchQuestionPage(page) {
+  if (page < 1 || loadedPages.value.has(page)) return
+  if (pageRequests.has(page)) return pageRequests.get(page)
+
+  const request = (async () => {
+    setWithCopy(loadingPages, page, true)
+    try {
+      const params = { page, size: QUESTION_BATCH_SIZE }
+      let rows = []
+
+      if (mode.value === 'wrong') {
+        rows = await api.wrongQuestions(auth.user.id, params)
+      } else if (mode.value === 'favorite') {
+        rows = await api.favoriteQuestions(auth.user.id, params)
+      } else {
+        rows = await api.questions({
+          categoryId: categoryId.value,
+          status: 'ENABLED',
+          ...params,
+        })
+      }
+
+      rows = Array.isArray(rows) ? rows : []
+      const startIndex = (page - 1) * QUESTION_BATCH_SIZE
+      const nextCache = new Map(questionCache.value)
+      rows.forEach((item, offset) => {
+        nextCache.set(startIndex + offset, item)
+      })
+      questionCache.value = nextCache
+      setWithCopy(loadedPages, page, true)
+
+      if (mode.value === 'favorite') {
+        const ids = new Set(favoriteIds.value)
+        rows.forEach((item) => ids.add(item.id))
+        favoriteIds.value = ids
+      }
+
+      if (rows.length < QUESTION_BATCH_SIZE) {
+        hasMoreQuestions.value = false
+        totalKnownCount.value = startIndex + rows.length
+      }
+    } finally {
+      setWithCopy(loadingPages, page, false)
+      pageRequests.delete(page)
+    }
+  })()
+
+  pageRequests.set(page, request)
+  return request
+}
+
+async function ensureQuestionAt(index) {
+  if (index < 0) return false
+  if (questionCache.value.has(index)) return true
+  await fetchQuestionPage(pageForIndex(index))
+  return questionCache.value.has(index)
+}
+
+function prefetchAround(index) {
+  const page = pageForIndex(index)
+  const pageStartIndex = (page - 1) * QUESTION_BATCH_SIZE
+  const pageEndIndex = pageStartIndex + QUESTION_BATCH_SIZE - 1
+
+  trimQuestionBuffer(index)
+
+  if (index - pageStartIndex <= PREFETCH_REMAINING && page > 1) {
+    fetchQuestionPage(page - 1).catch(() => {})
+  }
+  if (pageEndIndex - index <= PREFETCH_REMAINING && hasMoreQuestions.value) {
+    fetchQuestionPage(page + 1).catch(() => {})
+  }
+}
+
 async function loadSavedProgress() {
   return api.practiceProgress(auth.user.id, {
     mode: normalizeMode(),
@@ -105,31 +229,29 @@ function restoreProgress(progress) {
   replaceReactiveObject(records, {})
   replaceReactiveObject(drafts, progress?.drafts)
 
-  const questionIds = questions.value.map((item) => item.id)
-  let nextIndex = 0
-  const savedQuestionIndex = questionIds.indexOf(progress?.currentQuestionId)
-  if (savedQuestionIndex >= 0) {
-    nextIndex = savedQuestionIndex
-  } else if (Number.isInteger(progress?.currentIndex)) {
-    nextIndex = Math.min(Math.max(progress.currentIndex, 0), questions.value.length - 1)
-  }
+  const nextIndex = Number.isInteger(progress?.currentIndex) ? Math.max(progress.currentIndex, 0) : 0
   currentIndex.value = nextIndex
+  return nextIndex
 }
 
 function progressPayload() {
-  const current = questions.value[currentIndex.value]
+  const current = currentQuestionSummary.value
+  const questionIds = [...questionCache.value.entries()]
+    .sort(([leftIndex], [rightIndex]) => leftIndex - rightIndex)
+    .map(([, item]) => item.id)
+
   return {
     mode: normalizeMode(),
     categoryId: categoryId.value,
     currentIndex: currentIndex.value,
     currentQuestionId: current?.id || null,
-    questionIds: questions.value.map((item) => item.id),
+    questionIds,
     drafts: { ...drafts },
   }
 }
 
 async function saveProgressNow() {
-  if (!auth.user?.id || !questions.value.length) return
+  if (!auth.user?.id || !questionCache.value.size) return
   if (saveTimer) {
     window.clearTimeout(saveTimer)
     saveTimer = null
@@ -158,36 +280,37 @@ function saveDraft() {
 
 async function loadQuestions() {
   loading.value = true
+  restoringProgress.value = true
+  resetQuestionBuffer()
   try {
-    if (mode.value === 'wrong') {
-      questions.value = await api.wrongQuestions(auth.user.id)
-    } else if (mode.value === 'favorite') {
-      questions.value = await api.favoriteQuestions(auth.user.id)
-      favoriteIds.value = new Set(questions.value.map((item) => item.id))
-    } else {
-      questions.value = await api.questions({
-        categoryId: categoryId.value,
-        status: 'ENABLED',
-        page: 1,
-        size: 2000,
-      })
+    const progress = await loadSavedProgress()
+    const savedIndex = restoreProgress(progress)
+    let hasQuestion = await ensureQuestionAt(savedIndex)
+
+    if (!hasQuestion && savedIndex > 0) {
+      resetQuestionBuffer()
+      currentIndex.value = 0
+      hasQuestion = await ensureQuestionAt(0)
     }
 
-    if (questions.value.length) {
-      const progress = await loadSavedProgress()
-      restoreProgress(progress)
+    restoringProgress.value = false
+    if (hasQuestion) {
       await loadCurrentDetail()
+      prefetchAround(currentIndex.value)
       await saveProgressNow()
+    } else {
+      currentDetail.value = null
     }
   } catch (err) {
     ElMessage.error(err.message || '加载题目失败')
   } finally {
+    restoringProgress.value = false
     loading.value = false
   }
 }
 
 async function loadCurrentDetail() {
-  const item = questions.value[currentIndex.value]
+  const item = currentQuestionSummary.value
   if (!item) {
     currentDetail.value = null
     return
@@ -307,10 +430,16 @@ async function toggleFavorite() {
   }
 }
 
-function previous() {
-  if (currentIndex.value > 0) {
-    pageTurn.value = 'prev'
-    currentIndex.value -= 1
+async function previous() {
+  if (currentIndex.value <= 0) return
+  try {
+    const targetIndex = currentIndex.value - 1
+    if (await ensureQuestionAt(targetIndex)) {
+      pageTurn.value = 'prev'
+      currentIndex.value = targetIndex
+    }
+  } catch (err) {
+    ElMessage.error(err.message || '加载上一题失败')
   }
 }
 
@@ -318,10 +447,16 @@ function goBack() {
   router.push(backTarget.value)
 }
 
-function next() {
-  if (currentIndex.value < questions.value.length - 1) {
-    pageTurn.value = 'next'
-    currentIndex.value += 1
+async function next() {
+  try {
+    const targetIndex = currentIndex.value + 1
+    if (await ensureQuestionAt(targetIndex)) {
+      pageTurn.value = 'next'
+      currentIndex.value = targetIndex
+      return
+    }
+  } catch (err) {
+    ElMessage.error(err.message || '加载下一题失败')
     return
   }
   ElMessage.info('已经是最后一题')
@@ -388,7 +523,7 @@ onBeforeUnmount(() => {
                 <Star v-else />
               </el-icon>
             </el-button>
-            <span class="question-counter">{{ currentIndex + 1 }}/{{ questions.length }}</span>
+            <span class="question-counter">{{ counterText }}</span>
           </div>
         </div>
 
@@ -479,7 +614,7 @@ onBeforeUnmount(() => {
           </el-button>
           <div class="question-nav-row">
             <el-button :icon="ArrowLeft" :disabled="currentIndex === 0" @click="previous">上一题</el-button>
-            <el-button type="primary" :disabled="currentIndex === questions.length - 1" @click="next">
+            <el-button type="primary" :disabled="nextDisabled" @click="next">
               下一题
               <el-icon class="el-icon--right"><ArrowRight /></el-icon>
             </el-button>
