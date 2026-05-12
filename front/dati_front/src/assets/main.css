@@ -1263,6 +1263,7 @@ a {
 }
 
 .practice-page {
+  position: relative;
   overflow-x: hidden;
   padding-bottom: calc(128px + env(safe-area-inset-bottom));
   overscroll-behavior-x: contain;
@@ -1273,34 +1274,39 @@ a {
   position: relative;
   min-height: calc(100dvh - 210px);
   background: #ffffff;
+  backface-visibility: hidden;
   will-change: transform, opacity;
+}
+
+.question-page-frame.is-dragging {
+  cursor: grabbing;
 }
 
 .page-turn-next-enter-active,
 .page-turn-next-leave-active,
 .page-turn-prev-enter-active,
 .page-turn-prev-leave-active {
-  transition: transform 0.1s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.22s ease;
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.14s ease;
 }
 
 .page-turn-next-enter-from {
-  opacity: 0;
-  transform: translateX(42px);
+  opacity: 0.96;
+  transform: translate3d(18px, 0, 0);
 }
 
 .page-turn-next-leave-to {
-  opacity: 0;
-  transform: translateX(-42px);
+  opacity: 0.96;
+  transform: translate3d(-18px, 0, 0);
 }
 
 .page-turn-prev-enter-from {
-  opacity: 0;
-  transform: translateX(-42px);
+  opacity: 0.96;
+  transform: translate3d(-18px, 0, 0);
 }
 
 .page-turn-prev-leave-to {
-  opacity: 0;
-  transform: translateX(42px);
+  opacity: 0.96;
+  transform: translate3d(18px, 0, 0);
 }
 
 .question-card {

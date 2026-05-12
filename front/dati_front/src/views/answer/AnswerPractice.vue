@@ -19,9 +19,12 @@ const loadingPages = ref(new Set())
 const hasMoreQuestions = ref(true)
 const totalKnownCount = ref(null)
 const restoringProgress = ref(false)
+const suppressNextIndexWatch = ref(false)
 const pageRequests = new Map()
+const detailRequests = new Map()
 const currentIndex = ref(0)
 const currentDetail = ref(null)
+const questionDetailCache = ref(new Map())
 const selectedAnswers = ref([])
 const analysisAnswer = ref('')
 const favoriteIds = ref(new Set())
@@ -32,12 +35,22 @@ const drafts = reactive({})
 const swipeGesture = reactive({
   startX: 0,
   startY: 0,
+  deltaX: 0,
+  deltaY: 0,
+  width: 0,
+  dragging: false,
+  settling: false,
+  horizontal: false,
+  moved: false,
   ignored: false,
+  suppressClickUntil: 0,
 })
 let saveTimer = null
 
 const SWIPE_MIN_DISTANCE = 72
-const SWIPE_DIRECTION_RATIO = 1.35
+const SWIPE_DIRECTION_RATIO = 1.18
+const SWIPE_MAX_DRAG_RATIO = 0.86
+const SWIPE_RESISTANCE = 0.32
 
 const mode = computed(() => route.query.mode || 'practice')
 const categoryId = computed(() => (route.query.categoryId ? Number(route.query.categoryId) : null))
@@ -76,6 +89,13 @@ const submitted = computed(() => Boolean(currentRecord.value?.submitted))
 const userAnswerText = computed(() => currentRecord.value?.userAnswer || selectedAnswers.value.join(','))
 const isFavorite = computed(() => currentQuestion.value && favoriteIds.value.has(currentQuestion.value.id))
 const pageTurnName = computed(() => `page-turn-${pageTurn.value}`)
+const pageDragStyle = computed(() => {
+  if (!swipeGesture.dragging && !swipeGesture.settling && swipeGesture.deltaX === 0) return {}
+  return {
+    transform: `translate3d(${swipeGesture.deltaX}px, 0, 0)`,
+    transition: swipeGesture.dragging ? 'none' : 'transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1)',
+  }
+})
 const showManualSubmit = computed(() => {
   const type = currentQuestion.value?.type
   return (type === 'MULTIPLE' || type === 'ANALYSIS') && !submitted.value
@@ -83,9 +103,14 @@ const showManualSubmit = computed(() => {
 
 watch(currentIndex, async () => {
   if (restoringProgress.value) return
+  if (suppressNextIndexWatch.value) {
+    suppressNextIndexWatch.value = false
+    return
+  }
   await ensureQuestionAt(currentIndex.value)
   await loadCurrentDetail()
   prefetchAround(currentIndex.value)
+  prefetchNeighborDetails(currentIndex.value)
   await saveProgressNow()
 })
 
@@ -120,6 +145,8 @@ function resetQuestionBuffer() {
   hasMoreQuestions.value = true
   totalKnownCount.value = null
   pageRequests.clear()
+  detailRequests.clear()
+  questionDetailCache.value = new Map()
 }
 
 function pageForIndex(index) {
@@ -218,6 +245,19 @@ function prefetchAround(index) {
   }
 }
 
+async function prefetchNeighborDetails(index) {
+  const targets = [index - 1, index + 1].filter((target) => target >= 0)
+  targets.forEach(async (target) => {
+    try {
+      if (await ensureQuestionAt(target)) {
+        await loadDetailForIndex(target)
+      }
+    } catch {
+      // 预取失败不打断当前答题。
+    }
+  })
+}
+
 async function loadSavedProgress() {
   return api.practiceProgress(auth.user.id, {
     mode: normalizeMode(),
@@ -297,6 +337,7 @@ async function loadQuestions() {
     if (hasQuestion) {
       await loadCurrentDetail()
       prefetchAround(currentIndex.value)
+      prefetchNeighborDetails(currentIndex.value)
       await saveProgressNow()
     } else {
       currentDetail.value = null
@@ -316,30 +357,65 @@ async function loadCurrentDetail() {
     return
   }
   try {
-    currentDetail.value = await api.questionDetail(item.id, auth.user.id)
-    const stat = currentDetail.value?.stat
-    const ids = new Set(favoriteIds.value)
-    if (stat?.favorite) ids.add(item.id)
-    else ids.delete(item.id)
-    favoriteIds.value = ids
-
-    if (!records[item.id] && stat?.lastAnswer) {
-      records[item.id] = {
-        submitted: true,
-        userAnswer: stat.lastAnswer,
-        correct: stat.lastCorrect,
-      }
-    }
-
-    const savedAnswer = records[item.id]?.userAnswer || drafts[item.id]?.userAnswer || ''
-    selectedAnswers.value = savedAnswer ? savedAnswer.split(',').filter(Boolean) : []
-    analysisAnswer.value = savedAnswer
+    const expectedId = item.id
+    const detail = await fetchQuestionDetail(item)
+    if (currentQuestionSummary.value?.id !== expectedId) return
+    applyQuestionDetail(detail, item)
   } catch (err) {
     ElMessage.error(err.message || '加载题目详情失败')
   }
 }
 
+async function loadDetailForIndex(index) {
+  const item = questionCache.value.get(index)
+  if (!item) return null
+  return fetchQuestionDetail(item)
+}
+
+async function fetchQuestionDetail(item) {
+  const cached = questionDetailCache.value.get(item.id)
+  if (cached) return cached
+  if (detailRequests.has(item.id)) return detailRequests.get(item.id)
+
+  const request = api.questionDetail(item.id, auth.user.id)
+    .then((detail) => {
+      const next = new Map(questionDetailCache.value)
+      next.set(item.id, detail)
+      questionDetailCache.value = next
+      return detail
+    })
+    .finally(() => {
+      detailRequests.delete(item.id)
+    })
+
+  detailRequests.set(item.id, request)
+  return request
+}
+
+function applyQuestionDetail(detail, item) {
+  if (!detail) return
+  currentDetail.value = detail
+  const stat = detail?.stat
+  const ids = new Set(favoriteIds.value)
+  if (stat?.favorite) ids.add(item.id)
+  else ids.delete(item.id)
+  favoriteIds.value = ids
+
+  if (!records[item.id] && stat?.lastAnswer) {
+    records[item.id] = {
+      submitted: true,
+      userAnswer: stat.lastAnswer,
+      correct: stat.lastCorrect,
+    }
+  }
+
+  const savedAnswer = records[item.id]?.userAnswer || drafts[item.id]?.userAnswer || ''
+  selectedAnswers.value = savedAnswer ? savedAnswer.split(',').filter(Boolean) : []
+  analysisAnswer.value = savedAnswer
+}
+
 function toggleOption(option) {
+  if (Date.now() < swipeGesture.suppressClickUntil) return
   if (submitted.value) return
   const key = option.optionKey
   if (currentQuestion.value.type === 'MULTIPLE') {
@@ -466,17 +542,39 @@ async function toggleFavorite() {
   }
 }
 
-async function previous() {
-  if (currentIndex.value <= 0) return
+async function switchToIndex(targetIndex, direction) {
+  if (targetIndex < 0) return false
   try {
-    const targetIndex = currentIndex.value - 1
-    if (await ensureQuestionAt(targetIndex)) {
-      pageTurn.value = 'prev'
+    let hasQuestion = questionCache.value.has(targetIndex)
+    if (!hasQuestion) hasQuestion = await ensureQuestionAt(targetIndex)
+    if (hasQuestion) {
+      const targetItem = questionCache.value.get(targetIndex)
+      const cachedDetail = targetItem ? questionDetailCache.value.get(targetItem.id) : null
+      pageTurn.value = direction
+      suppressNextIndexWatch.value = true
       currentIndex.value = targetIndex
+      if (cachedDetail) {
+        applyQuestionDetail(cachedDetail, targetItem)
+      } else if (targetItem) {
+        currentDetail.value = { question: targetItem, options: [], stat: null }
+        selectedAnswers.value = []
+        analysisAnswer.value = ''
+        await loadCurrentDetail()
+      }
+      prefetchAround(targetIndex)
+      prefetchNeighborDetails(targetIndex)
+      saveProgressNow()
+      return true
     }
   } catch (err) {
-    ElMessage.error(err.message || '加载上一题失败')
+    ElMessage.error(err.message || '加载题目失败')
   }
+  return false
+}
+
+async function previous() {
+  if (currentIndex.value <= 0) return false
+  return switchToIndex(currentIndex.value - 1, 'prev')
 }
 
 function goBack() {
@@ -484,18 +582,10 @@ function goBack() {
 }
 
 async function next() {
-  try {
-    const targetIndex = currentIndex.value + 1
-    if (await ensureQuestionAt(targetIndex)) {
-      pageTurn.value = 'next'
-      currentIndex.value = targetIndex
-      return
-    }
-  } catch (err) {
-    ElMessage.error(err.message || '加载下一题失败')
-    return
-  }
+  const switched = await switchToIndex(currentIndex.value + 1, 'next')
+  if (switched) return true
   ElMessage.info('已经是最后一题')
+  return false
 }
 
 function globalAccuracy(question) {
@@ -517,12 +607,20 @@ function handleTouchStart(event) {
   if (!touch) return
   swipeGesture.startX = touch.clientX
   swipeGesture.startY = touch.clientY
+  swipeGesture.deltaX = 0
+  swipeGesture.deltaY = 0
+  swipeGesture.width = event.currentTarget?.clientWidth || window.innerWidth || 360
+  swipeGesture.dragging = false
+  swipeGesture.settling = false
+  swipeGesture.horizontal = false
+  swipeGesture.moved = false
   swipeGesture.ignored = isSwipeIgnored(event.target)
+  prefetchNeighborDetails(currentIndex.value)
 }
 
-function handleTouchEnd(event) {
+function handleTouchMove(event) {
   if (swipeGesture.ignored || !currentQuestion.value) return
-  const touch = event.changedTouches?.[0]
+  const touch = event.touches?.[0]
   if (!touch) return
 
   const deltaX = touch.clientX - swipeGesture.startX
@@ -530,10 +628,88 @@ function handleTouchEnd(event) {
   const absX = Math.abs(deltaX)
   const absY = Math.abs(deltaY)
 
-  if (absX < SWIPE_MIN_DISTANCE || absX < absY * SWIPE_DIRECTION_RATIO) return
+  if (!swipeGesture.horizontal) {
+    if (absX < 8 && absY < 8) return
+    if (absX < absY * SWIPE_DIRECTION_RATIO) {
+      swipeGesture.ignored = true
+      return
+    }
+    swipeGesture.horizontal = true
+    swipeGesture.dragging = true
+  }
 
-  if (deltaX > 0) previous()
-  else next()
+  event.preventDefault()
+  swipeGesture.moved = true
+  swipeGesture.deltaY = deltaY
+
+  const isAtFirst = deltaX > 0 && currentIndex.value === 0
+  const isAtLast = deltaX < 0 && nextDisabled.value
+  const resistedDelta = isAtFirst || isAtLast ? deltaX * SWIPE_RESISTANCE : deltaX
+  const maxDrag = Math.max(120, swipeGesture.width * SWIPE_MAX_DRAG_RATIO)
+  swipeGesture.deltaX = Math.max(-maxDrag, Math.min(maxDrag, resistedDelta))
+
+  const targetIndex = deltaX > 0 ? currentIndex.value - 1 : currentIndex.value + 1
+  if (targetIndex >= 0) {
+    ensureQuestionAt(targetIndex)
+      .then((ready) => {
+        if (ready) return loadDetailForIndex(targetIndex)
+        return null
+      })
+      .catch(() => {})
+  }
+}
+
+function resetSwipeDrag(animate = true) {
+  if (animate && swipeGesture.deltaX !== 0) {
+    swipeGesture.dragging = false
+    swipeGesture.settling = true
+    window.requestAnimationFrame(() => {
+      swipeGesture.deltaX = 0
+    })
+    window.setTimeout(() => {
+      swipeGesture.settling = false
+    }, 190)
+    return
+  }
+
+  swipeGesture.deltaX = 0
+  swipeGesture.deltaY = 0
+  swipeGesture.dragging = false
+  swipeGesture.settling = false
+  swipeGesture.horizontal = false
+}
+
+async function handleTouchEnd(event) {
+  if (swipeGesture.ignored || !currentQuestion.value) {
+    resetSwipeDrag(false)
+    return
+  }
+  const touch = event.changedTouches?.[0]
+  if (!touch) {
+    resetSwipeDrag()
+    return
+  }
+
+  const deltaX = touch.clientX - swipeGesture.startX
+  const deltaY = touch.clientY - swipeGesture.startY
+  const absX = Math.abs(deltaX)
+  const absY = Math.abs(deltaY)
+
+  if (swipeGesture.moved) swipeGesture.suppressClickUntil = Date.now() + 280
+
+  const threshold = Math.min(124, Math.max(SWIPE_MIN_DISTANCE, swipeGesture.width * 0.22))
+  if (!swipeGesture.horizontal || absX < threshold || absX < absY * SWIPE_DIRECTION_RATIO) {
+    resetSwipeDrag()
+    return
+  }
+
+  resetSwipeDrag(false)
+  if (deltaX > 0) await previous()
+  else await next()
+}
+
+function handleTouchCancel() {
+  resetSwipeDrag()
 }
 
 onMounted(loadQuestions)
@@ -544,7 +720,13 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="mobile-shell">
-    <div class="mobile-page practice-page" @touchstart.passive="handleTouchStart" @touchend.passive="handleTouchEnd">
+    <div
+      class="mobile-page practice-page"
+      @touchstart.passive="handleTouchStart"
+      @touchmove="handleTouchMove"
+      @touchend="handleTouchEnd"
+      @touchcancel="handleTouchCancel"
+    >
       <template v-if="currentQuestion">
         <div class="question-topbar">
           <div class="question-tools">
@@ -563,8 +745,13 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <Transition :name="pageTurnName" mode="out-in">
-          <div :key="currentQuestion.id" class="question-page-frame">
+        <Transition :name="pageTurnName">
+          <div
+            :key="currentQuestion.id"
+            class="question-page-frame"
+            :class="{ 'is-dragging': swipeGesture.dragging, 'is-settling': swipeGesture.settling }"
+            :style="pageDragStyle"
+          >
             <section class="question-card">
               <span class="question-type">{{ typeLabel(currentQuestion.type) }}</span>
               <h1 class="question-title">{{ currentQuestion.title }}</h1>
