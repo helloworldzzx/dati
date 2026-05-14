@@ -136,6 +136,7 @@ export const api = {
   deleteCategory: (id) => request(`/api/categories/${id}`, { method: 'DELETE' }),
 
   questions: (params = {}) => request(`/api/questions?${query(params)}`),
+  questionPage: (params = {}) => request(`/api/questions/page?${query(params)}`),
   adminQuestions: (params = {}) => request(`/api/admin/questions?${query(params)}`),
   questionDetail: (id, userId) => request(`/api/questions/${id}${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
   createQuestion: (body) => request('/api/admin/questions', { method: 'POST', body }),
@@ -149,7 +150,9 @@ export const api = {
   finishSession: (sessionId) => request(`/api/practice/sessions/${sessionId}/finish`, { method: 'PATCH' }),
   submitAnswer: (body) => request('/api/practice/answers', { method: 'POST', body }),
   wrongQuestions: (userId, params = {}) => request(`/api/users/${userId}/wrong-questions?${query(params)}`),
+  wrongQuestionsPage: (userId, params = {}) => request(`/api/users/${userId}/wrong-questions/page?${query(params)}`),
   favoriteQuestions: (userId, params = {}) => request(`/api/users/${userId}/favorite-questions?${query(params)}`),
+  favoriteQuestionsPage: (userId, params = {}) => request(`/api/users/${userId}/favorite-questions/page?${query(params)}`),
   practiceProgress: (userId, params = {}) => request(`/api/users/${userId}/practice-progress?${query(params)}`),
   savePracticeProgress: (userId, body) =>
     request(`/api/users/${userId}/practice-progress`, {

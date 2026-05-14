@@ -109,10 +109,32 @@ public class QuestionService {
         return questionMapper.listWrongByUser(userId, safeSize, (safePage - 1) * safeSize);
     }
 
+    public PageResult<Question> pageWrongQuestions(Long userId, Integer page, Integer size) {
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 10 : Math.min(size, 100);
+        return new PageResult<>(
+                questionMapper.listWrongByUser(userId, safeSize, (safePage - 1) * safeSize),
+                questionMapper.countWrongByUser(userId),
+                safePage,
+                safeSize
+        );
+    }
+
     public List<Question> listFavoriteQuestions(Long userId, Integer page, Integer size) {
         int safePage = page == null || page < 1 ? 1 : page;
         int safeSize = size == null || size < 1 ? 10 : Math.min(size, 100);
         return questionMapper.listFavoriteByUser(userId, safeSize, (safePage - 1) * safeSize);
+    }
+
+    public PageResult<Question> pageFavoriteQuestions(Long userId, Integer page, Integer size) {
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 10 : Math.min(size, 100);
+        return new PageResult<>(
+                questionMapper.listFavoriteByUser(userId, safeSize, (safePage - 1) * safeSize),
+                questionMapper.countFavoriteByUser(userId),
+                safePage,
+                safeSize
+        );
     }
 
     @Transactional

@@ -83,6 +83,16 @@ public interface QuestionMapper {
     );
 
     @Select("""
+            SELECT COUNT(*)
+            FROM question q
+            INNER JOIN user_question_stat s ON s.question_id = q.id
+            WHERE s.user_id = #{userId}
+              AND s.wrong_count > 0
+              AND q.status = 'ENABLED'
+            """)
+    long countWrongByUser(@Param("userId") Long userId);
+
+    @Select("""
             SELECT q.id, q.category_id, q.type, q.title, q.correct_answer, q.analysis, q.source_file,
                    q.status, q.answer_count, q.correct_count, q.created_by, q.created_at, q.updated_at
             FROM question q
@@ -98,6 +108,16 @@ public interface QuestionMapper {
             @Param("limit") int limit,
             @Param("offset") int offset
     );
+
+    @Select("""
+            SELECT COUNT(*)
+            FROM question q
+            INNER JOIN user_question_stat s ON s.question_id = q.id
+            WHERE s.user_id = #{userId}
+              AND s.is_favorite = TRUE
+              AND q.status = 'ENABLED'
+            """)
+    long countFavoriteByUser(@Param("userId") Long userId);
 
     @Insert("""
             INSERT INTO question (

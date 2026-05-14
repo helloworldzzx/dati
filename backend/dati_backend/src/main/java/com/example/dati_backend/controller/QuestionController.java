@@ -37,6 +37,17 @@ public class QuestionController {
         return ApiResponse.ok(questionService.listQuestions(categoryId, type, "ENABLED", page, size));
     }
 
+    @GetMapping("/api/questions/page")
+    public ApiResponse<PageResult<Question>> pageQuestions(
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "ENABLED") String status,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return ApiResponse.ok(questionService.pageQuestions(categoryId, type, "ENABLED", page, size));
+    }
+
     @GetMapping("/api/admin/questions")
     public ApiResponse<PageResult<Question>> pageAdminQuestions(
             @RequestParam(required = false) Long categoryId,

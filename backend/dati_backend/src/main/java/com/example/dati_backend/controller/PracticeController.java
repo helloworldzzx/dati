@@ -2,6 +2,7 @@ package com.example.dati_backend.controller;
 
 import com.example.dati_backend.common.ApiResponse;
 import com.example.dati_backend.dto.FavoriteRequest;
+import com.example.dati_backend.dto.PageResult;
 import com.example.dati_backend.dto.PracticeProgressRequest;
 import com.example.dati_backend.dto.PracticeProgressResponse;
 import com.example.dati_backend.dto.PracticeSessionRequest;
@@ -83,6 +84,16 @@ public class PracticeController {
         return ApiResponse.ok(questionService.listWrongQuestions(accessibleUserId(userId, currentUser), page, size));
     }
 
+    @GetMapping("/api/users/{userId}/wrong-questions/page")
+    public ApiResponse<PageResult<Question>> pageWrongQuestions(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            @AuthenticationPrincipal SysUser currentUser
+    ) {
+        return ApiResponse.ok(questionService.pageWrongQuestions(accessibleUserId(userId, currentUser), page, size));
+    }
+
     @GetMapping("/api/users/{userId}/favorite-questions")
     public ApiResponse<List<Question>> favoriteQuestions(
             @PathVariable Long userId,
@@ -91,6 +102,16 @@ public class PracticeController {
             @AuthenticationPrincipal SysUser currentUser
     ) {
         return ApiResponse.ok(questionService.listFavoriteQuestions(accessibleUserId(userId, currentUser), page, size));
+    }
+
+    @GetMapping("/api/users/{userId}/favorite-questions/page")
+    public ApiResponse<PageResult<Question>> pageFavoriteQuestions(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            @AuthenticationPrincipal SysUser currentUser
+    ) {
+        return ApiResponse.ok(questionService.pageFavoriteQuestions(accessibleUserId(userId, currentUser), page, size));
     }
 
     @GetMapping("/api/users/{userId}/practice-progress")

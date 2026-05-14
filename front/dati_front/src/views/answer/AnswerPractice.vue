@@ -77,7 +77,10 @@ const counterText = computed(() => {
   const totalText = totalKnownCount.value === null ? `${minimumVisibleCount}+` : totalKnownCount.value
   return `${currentIndex.value + 1}/${totalText}`
 })
-const nextDisabled = computed(() => !hasMoreQuestions.value && !questionCache.value.has(currentIndex.value + 1))
+const nextDisabled = computed(() => {
+  if (totalKnownCount.value !== null) return currentIndex.value >= Math.max(totalKnownCount.value - 1, 0)
+  return !hasMoreQuestions.value && !questionCache.value.has(currentIndex.value + 1)
+})
 const options = computed(() => {
   if (!currentQuestion.value) return []
   if (currentQuestion.value.type === 'JUDGE' && !currentDetail.value?.options?.length) {
@@ -164,6 +167,15 @@ function setWithCopy(setRef, value, enabled) {
   setRef.value = next
 }
 
+function normalizeQuestionPage(result) {
+  const rows = Array.isArray(result) ? result : result?.records
+  const total = Number(result?.total)
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total: Number.isFinite(total) ? total : null,
+  }
+}
+
 function trimQuestionBuffer(centerIndex = currentIndex.value) {
   const centerPage = pageForIndex(centerIndex)
   const keepPages = new Set([centerPage - 1, centerPage, centerPage + 1].filter((page) => page >= 1))
@@ -184,21 +196,21 @@ async function fetchQuestionPage(page) {
     setWithCopy(loadingPages, page, true)
     try {
       const params = { page, size: QUESTION_BATCH_SIZE }
-      let rows = []
+      let result = null
 
       if (mode.value === 'wrong') {
-        rows = await api.wrongQuestions(auth.user.id, params)
+        result = await api.wrongQuestionsPage(auth.user.id, params)
       } else if (mode.value === 'favorite') {
-        rows = await api.favoriteQuestions(auth.user.id, params)
+        result = await api.favoriteQuestionsPage(auth.user.id, params)
       } else {
-        rows = await api.questions({
+        result = await api.questionPage({
           categoryId: categoryId.value,
           status: 'ENABLED',
           ...params,
         })
       }
 
-      rows = Array.isArray(rows) ? rows : []
+      const { rows, total } = normalizeQuestionPage(result)
       const startIndex = (page - 1) * QUESTION_BATCH_SIZE
       const nextCache = new Map(questionCache.value)
       rows.forEach((item, offset) => {
@@ -213,9 +225,12 @@ async function fetchQuestionPage(page) {
         favoriteIds.value = ids
       }
 
-      if (rows.length < QUESTION_BATCH_SIZE) {
-        hasMoreQuestions.value = false
+      if (total !== null) {
+        totalKnownCount.value = total
+        hasMoreQuestions.value = startIndex + rows.length < total
+      } else if (rows.length < QUESTION_BATCH_SIZE) {
         totalKnownCount.value = startIndex + rows.length
+        hasMoreQuestions.value = false
       }
     } finally {
       setWithCopy(loadingPages, page, false)
