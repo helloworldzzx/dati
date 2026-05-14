@@ -725,6 +725,11 @@ function isSwipeIgnored(target) {
 }
 
 function handleTouchStart(event) {
+  if ((event.touches?.length || 0) > 1) {
+    swipeGesture.ignored = true
+    resetSwipeDrag(false)
+    return
+  }
   const touch = event.touches?.[0]
   if (!touch) return
   swipeGesture.startX = touch.clientX
@@ -741,6 +746,11 @@ function handleTouchStart(event) {
 }
 
 function handleTouchMove(event) {
+  if ((event.touches?.length || 0) > 1) {
+    swipeGesture.ignored = true
+    resetSwipeDrag(false)
+    return
+  }
   if (swipeGesture.ignored || !currentQuestion.value) return
   const touch = event.touches?.[0]
   if (!touch) return

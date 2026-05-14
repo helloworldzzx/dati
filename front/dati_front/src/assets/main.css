@@ -1270,6 +1270,17 @@ a {
   touch-action: pan-y;
 }
 
+.practice-page .el-input__inner,
+.practice-page .el-textarea__inner {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.practice-page .el-textarea__inner {
+  min-height: 180px;
+  resize: none;
+}
+
 .question-page-frame {
   position: relative;
   min-height: calc(100dvh - 210px);
