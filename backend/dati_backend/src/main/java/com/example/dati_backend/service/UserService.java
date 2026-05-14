@@ -68,13 +68,11 @@ public class UserService {
         SysUser user = new SysUser();
         user.setUsername(request.username().trim());
         user.setPhone(trimToNull(request.phone()));
-        user.setPasswordHash(passwordEncoder.encode(
-                StringUtils.hasText(request.password()) ? request.password() : DEFAULT_PASSWORD
-        ));
+        user.setPasswordHash(passwordEncoder.encode(resolveInitialPassword(request.password())));
         user.setRealName(trimToNull(request.realName()));
         user.setRole(defaultText(request.role(), "USER").toUpperCase());
         user.setStatus(defaultText(request.status(), "ENABLED").toUpperCase());
-        user.setMustChangePassword(request.mustChangePassword() == null || request.mustChangePassword());
+        user.setMustChangePassword(true);
         userMapper.insert(user);
         return getUser(user.getId());
     }
@@ -92,6 +90,7 @@ public class UserService {
             user.setPhone(trimToNull(request.phone()));
         }
         if (StringUtils.hasText(request.password())) {
+            validatePassword(request.password());
             user.setPasswordHash(passwordEncoder.encode(request.password()));
             user.setMustChangePassword(request.mustChangePassword() == null || request.mustChangePassword());
         } else if (request.mustChangePassword() != null) {
@@ -343,6 +342,20 @@ public class UserService {
 
     private String defaultText(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
+    }
+
+    private String resolveInitialPassword(String password) {
+        if (!StringUtils.hasText(password)) {
+            return DEFAULT_PASSWORD;
+        }
+        validatePassword(password);
+        return password;
+    }
+
+    private void validatePassword(String password) {
+        if (!StringUtils.hasText(password) || password.length() < 6) {
+            throw new IllegalArgumentException("Password must be at least 6 characters");
+        }
     }
 
     private int safePage(Integer page) {

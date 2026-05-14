@@ -50,15 +50,20 @@ public class AuthService {
     @Transactional
     public SysUser completeFirstLogin(SysUser currentUser, CompleteFirstLoginRequest request) {
         SysUser user = currentUser(currentUser);
-        if (request == null || !StringUtils.hasText(request.phone()) || !StringUtils.hasText(request.newPassword())) {
-            throw new IllegalArgumentException("Phone and new password are required");
+        if (request == null) {
+            throw new IllegalArgumentException("New password is required");
         }
-        userMapper.updatePhoneAndPassword(
-                user.getId(),
-                request.phone().trim(),
-                passwordEncoder.encode(request.newPassword()),
-                false
-        );
+        validateNewPassword(request.newPassword());
+        if (StringUtils.hasText(request.phone())) {
+            userMapper.updatePhoneAndPassword(
+                    user.getId(),
+                    request.phone().trim(),
+                    passwordEncoder.encode(request.newPassword()),
+                    false
+            );
+        } else {
+            userMapper.updatePassword(user.getId(), passwordEncoder.encode(request.newPassword()), false);
+        }
         return userMapper.findById(user.getId());
     }
 
@@ -68,10 +73,20 @@ public class AuthService {
         if (request == null || !StringUtils.hasText(request.oldPassword()) || !StringUtils.hasText(request.newPassword())) {
             throw new IllegalArgumentException("Old password and new password are required");
         }
+        validateNewPassword(request.newPassword());
         if (!passwordEncoder.matches(request.oldPassword(), user.getPasswordHash())) {
             throw new IllegalArgumentException("Old password is incorrect");
         }
         userMapper.updatePassword(user.getId(), passwordEncoder.encode(request.newPassword()), false);
         return userMapper.findById(user.getId());
+    }
+
+    private void validateNewPassword(String password) {
+        if (!StringUtils.hasText(password)) {
+            throw new IllegalArgumentException("New password is required");
+        }
+        if (password.length() < 6) {
+            throw new IllegalArgumentException("New password must be at least 6 characters");
+        }
     }
 }

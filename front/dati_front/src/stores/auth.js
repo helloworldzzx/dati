@@ -50,6 +50,12 @@ export const useAuthStore = defineStore('auth', {
       this.user = user
       return user
     },
+    async changePassword(oldPassword, newPassword) {
+      const user = await api.changePassword({ oldPassword, newPassword })
+      saveUser(user, this.scope)
+      this.user = user
+      return user
+    },
     logout() {
       clearAuth(this.scope)
       this.token = null

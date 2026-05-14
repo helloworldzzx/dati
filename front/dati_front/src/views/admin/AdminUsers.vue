@@ -37,6 +37,7 @@ const rules = {
     {
       validator: (_, value, callback) => {
         if (!selectedId.value && !value) callback(new Error('请输入初始密码'))
+        else if (value && value.length < 6) callback(new Error('密码不得低于 6 位'))
         else callback()
       },
       trigger: 'blur',
@@ -118,6 +119,7 @@ async function save() {
   saving.value = true
   try {
     const payload = { ...form }
+    if (!selectedId.value) payload.mustChangePassword = true
     if (!payload.password) delete payload.password
 
     if (selectedId.value) {
@@ -338,7 +340,7 @@ onMounted(load)
           </el-form-item>
         </div>
         <el-form-item>
-          <el-checkbox v-model="form.mustChangePassword">首次登录需绑定手机号并修改密码</el-checkbox>
+          <el-checkbox v-model="form.mustChangePassword" :disabled="!selectedUser">首次登录需修改密码</el-checkbox>
         </el-form-item>
       </el-form>
 

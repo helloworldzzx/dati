@@ -528,6 +528,13 @@ a {
   color: #667085;
 }
 
+.dialog-tip {
+  margin: 0 0 16px;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 .answer-header {
   position: sticky;
   z-index: 10;
