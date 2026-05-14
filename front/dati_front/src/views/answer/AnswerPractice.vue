@@ -12,6 +12,7 @@ const auth = useAuthStore()
 
 const QUESTION_BATCH_SIZE = 10
 const PREFETCH_REMAINING = 3
+const ANSWER_REVIEW_VISIBLE_MS = 30 * 60 * 1000
 const loading = ref(false)
 const questionCache = ref(new Map())
 const loadedPages = ref(new Set())
@@ -176,6 +177,49 @@ function normalizeQuestionPage(result) {
   }
 }
 
+function isFreshAnswerRecord(record) {
+  if (!record?.submitted || !record?.answeredAt) return false
+  return Date.now() - record.answeredAt <= ANSWER_REVIEW_VISIBLE_MS
+}
+
+function recentAnswerStorageKey() {
+  return [
+    'dati_answer_recent_records',
+    auth.user?.id || 'guest',
+    normalizeMode(),
+    categoryId.value || 'all',
+  ].join(':')
+}
+
+function freshAnswerRecords(source = records) {
+  return Object.fromEntries(
+    Object.entries(source || {}).filter(([, record]) => isFreshAnswerRecord(record))
+  )
+}
+
+function loadRecentAnswerRecords() {
+  try {
+    const raw = window.sessionStorage.getItem(recentAnswerStorageKey())
+    return raw ? freshAnswerRecords(JSON.parse(raw)) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveRecentAnswerRecords() {
+  try {
+    const freshRecords = freshAnswerRecords()
+    const key = recentAnswerStorageKey()
+    if (Object.keys(freshRecords).length) {
+      window.sessionStorage.setItem(key, JSON.stringify(freshRecords))
+    } else {
+      window.sessionStorage.removeItem(key)
+    }
+  } catch {
+    // 临时显示状态保存失败不影响答题和后端统计。
+  }
+}
+
 function trimQuestionBuffer(centerIndex = currentIndex.value) {
   const centerPage = pageForIndex(centerIndex)
   const keepPages = new Set([centerPage - 1, centerPage, centerPage + 1].filter((page) => page >= 1))
@@ -285,7 +329,7 @@ async function loadSavedProgress() {
 }
 
 function restoreProgress(progress) {
-  replaceReactiveObject(records, {})
+  replaceReactiveObject(records, loadRecentAnswerRecords())
   replaceReactiveObject(drafts, progress?.drafts)
 
   const nextIndex = Number.isInteger(progress?.currentIndex) ? Math.max(progress.currentIndex, 0) : 0
@@ -420,12 +464,9 @@ function applyQuestionDetail(detail, item) {
   else ids.delete(item.id)
   favoriteIds.value = ids
 
-  if (!records[item.id] && stat?.lastAnswer) {
-    records[item.id] = {
-      submitted: true,
-      userAnswer: stat.lastAnswer,
-      correct: stat.lastCorrect,
-    }
+  if (records[item.id] && !isFreshAnswerRecord(records[item.id])) {
+    delete records[item.id]
+    saveRecentAnswerRecords()
   }
 
   const savedAnswer = records[item.id]?.userAnswer || drafts[item.id]?.userAnswer || ''
@@ -516,8 +557,10 @@ async function submitAnswer(answer, options = {}) {
       submitted: true,
       userAnswer: answer,
       correct: judgeCurrentAnswer(answer),
+      answeredAt: Date.now(),
     }
     delete drafts[questionId]
+    saveRecentAnswerRecords()
     saveProgressNow()
   }
 
@@ -533,8 +576,10 @@ async function submitAnswer(answer, options = {}) {
       submitted: true,
       userAnswer: answer,
       correct: record.correct,
+      answeredAt: Date.now(),
     }
     delete drafts[questionId]
+    saveRecentAnswerRecords()
     await saveProgressNow()
   } catch (err) {
     ElMessage.error(err.message || '提交失败')
@@ -757,6 +802,7 @@ function handleTouchCancel() {
 
 onMounted(loadQuestions)
 onBeforeUnmount(() => {
+  saveRecentAnswerRecords()
   saveProgressNow()
 })
 </script>
