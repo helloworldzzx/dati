@@ -41,6 +41,7 @@ public class PracticeService {
     private final UserQuestionStatMapper userQuestionStatMapper;
     private final UserAnswerStatMapper userAnswerStatMapper;
     private final UserPracticeProgressMapper userPracticeProgressMapper;
+    private final RankingService rankingService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -97,6 +98,7 @@ public class PracticeService {
         questionStat.setLastCorrect(correct);
         userQuestionStatMapper.upsertAnswer(questionStat);
         userAnswerStatMapper.upsertAnswer(request.userId(), correct, durationSeconds);
+        rankingService.clearRankingCache();
 
         return answerRecordMapper.findById(record.getId());
     }

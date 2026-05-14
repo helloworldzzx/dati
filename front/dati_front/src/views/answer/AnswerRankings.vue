@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -14,6 +14,9 @@ const router = useRouter()
 const rankings = ref([])
 const loading = ref(false)
 const sortMode = ref('answerCount')
+let refreshTimer = null
+
+const REFRESH_INTERVAL = 5000
 
 const sortOptions = [
   { label: '答题数量', value: 'answerCount' },
@@ -59,14 +62,32 @@ function subMetric(item) {
     : accuracyText(item)
 }
 
-async function load() {
-  loading.value = true
+async function load(options = {}) {
+  const quiet = Boolean(options.quiet)
+  if (!quiet) loading.value = true
   try {
-    rankings.value = await api.rankings(100, sortMode.value)
+    const result = await api.rankings(100, sortMode.value)
+    rankings.value = Array.isArray(result) ? result : []
   } catch (err) {
-    ElMessage.error(err.message || '加载失败')
+    if (!quiet) ElMessage.error(err.message || '加载失败')
   } finally {
-    loading.value = false
+    if (!quiet) loading.value = false
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  refreshTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      load({ quiet: true })
+    }
+  }, REFRESH_INTERVAL)
+}
+
+function stopAutoRefresh() {
+  if (refreshTimer) {
+    window.clearInterval(refreshTimer)
+    refreshTimer = null
   }
 }
 
@@ -78,8 +99,12 @@ function goBack() {
   router.push(backTarget.value)
 }
 
-watch(sortMode, load)
-onMounted(load)
+watch(sortMode, () => load())
+onMounted(() => {
+  load()
+  startAutoRefresh()
+})
+onBeforeUnmount(stopAutoRefresh)
 </script>
 
 <template>
