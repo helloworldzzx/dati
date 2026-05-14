@@ -147,6 +147,7 @@ export const api = {
 
   rankings: (limit = 50, sort) => request(`/api/rankings?${query({ limit, sort })}`),
   adminRankings: (params = {}) => request(`/api/admin/rankings?${query(params)}`),
+  adminRankingsExport: () => request('/api/admin/rankings/export'),
   startSession: (body) => request('/api/practice/sessions', { method: 'POST', body }),
   finishSession: (sessionId) => request(`/api/practice/sessions/${sessionId}/finish`, { method: 'PATCH' }),
   submitAnswer: (body) => request('/api/practice/answers', { method: 'POST', body }),

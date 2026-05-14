@@ -6,6 +6,10 @@ import com.example.dati_backend.dto.RankingItem;
 import com.example.dati_backend.service.RankingService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,5 +33,17 @@ public class RankingController {
             @RequestParam(defaultValue = "20") Integer size
     ) {
         return ApiResponse.ok(rankingService.pageRanking(page, size));
+    }
+
+    @GetMapping("/api/admin/rankings/export")
+    public ResponseEntity<byte[]> exportAdminRanking() {
+        byte[] content = rankingService.buildRankingExport();
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename("ranking-export.xlsx")
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(content);
     }
 }

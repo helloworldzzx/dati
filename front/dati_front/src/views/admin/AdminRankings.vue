@@ -1,11 +1,12 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { Download, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { api } from '@/services/api'
+import { api, downloadBlob } from '@/services/api'
 
 const rankings = ref([])
 const loading = ref(false)
+const exporting = ref(false)
 const pagination = reactive({
   page: 1,
   size: 20,
@@ -27,6 +28,18 @@ async function load() {
     ElMessage.error(err.message || '加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function exportRankings() {
+  exporting.value = true
+  try {
+    const blob = await api.adminRankingsExport()
+    downloadBlob(blob, 'ranking-export.xlsx')
+  } catch (err) {
+    ElMessage.error(err.message || '导出失败')
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -56,7 +69,10 @@ onMounted(load)
         <h2 class="page-title">排行榜</h2>
         <p class="page-desc">按正确题数、答题数和正确率排序。</p>
       </div>
-      <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+      <div class="toolbar-inline">
+        <el-button :icon="Download" :loading="exporting" @click="exportRankings">导出</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+      </div>
     </div>
 
     <el-card class="admin-list-card" shadow="never">
