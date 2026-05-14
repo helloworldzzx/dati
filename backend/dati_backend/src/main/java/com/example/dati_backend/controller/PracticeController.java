@@ -124,6 +124,15 @@ public class PracticeController {
         return ApiResponse.ok(practiceService.getProgress(accessibleUserId(userId, currentUser), mode, categoryId));
     }
 
+    @GetMapping("/api/users/{userId}/practice-progress/list")
+    public ApiResponse<List<PracticeProgressResponse>> listProgress(
+            @PathVariable Long userId,
+            @RequestParam(required = false) String mode,
+            @AuthenticationPrincipal SysUser currentUser
+    ) {
+        return ApiResponse.ok(practiceService.listProgress(accessibleUserId(userId, currentUser), mode));
+    }
+
     @PutMapping("/api/users/{userId}/practice-progress")
     public ApiResponse<PracticeProgressResponse> saveProgress(
             @PathVariable Long userId,

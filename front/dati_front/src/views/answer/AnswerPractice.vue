@@ -347,6 +347,11 @@ async function loadSavedProgress() {
   })
 }
 
+function shouldShowResumeNotice(progress) {
+  const resume = Array.isArray(route.query.resume) ? route.query.resume[0] : route.query.resume
+  return resume === '1' && Boolean(progress?.id)
+}
+
 function restoreProgress(progress) {
   replaceReactiveObject(records, loadRecentAnswerRecords())
   replaceReactiveObject(drafts, progress?.drafts)
@@ -420,6 +425,12 @@ async function loadQuestions() {
       await loadCurrentDetail()
       prefetchAround(currentIndex.value)
       prefetchNeighborDetails(currentIndex.value)
+      if (shouldShowResumeNotice(progress)) {
+        ElMessage.success({
+          message: '已自动回到上次位置',
+          duration: 1800,
+        })
+      }
       await saveProgressNow()
     } else {
       currentDetail.value = null

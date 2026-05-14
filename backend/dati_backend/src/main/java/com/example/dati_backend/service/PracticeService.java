@@ -143,6 +143,17 @@ public class PracticeService {
         return progress == null ? null : toProgressResponse(progress);
     }
 
+    public List<PracticeProgressResponse> listProgress(Long userId, String mode) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        String normalizedMode = StringUtils.hasText(mode) ? normalizeMode(mode) : null;
+        return userPracticeProgressMapper.listByUserAndMode(userId, normalizedMode)
+                .stream()
+                .map(this::toProgressResponse)
+                .toList();
+    }
+
     @Transactional
     public PracticeProgressResponse saveProgress(Long userId, PracticeProgressRequest request) {
         if (userId == null) {

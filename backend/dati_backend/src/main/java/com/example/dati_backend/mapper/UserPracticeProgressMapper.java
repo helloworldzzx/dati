@@ -1,6 +1,7 @@
 package com.example.dati_backend.mapper;
 
 import com.example.dati_backend.entity.UserPracticeProgress;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -18,6 +19,19 @@ public interface UserPracticeProgressMapper {
               AND scope_key = #{scopeKey}
             """)
     UserPracticeProgress findByScope(@Param("userId") Long userId, @Param("scopeKey") String scopeKey);
+
+    @Select("""
+            <script>
+            SELECT id, user_id, scope_key, mode, category_id, current_index,
+                   current_question_id, question_ids_json, draft_answers_json,
+                   created_at, updated_at
+            FROM user_practice_progress
+            WHERE user_id = #{userId}
+              <if test="mode != null and mode != ''">AND mode = #{mode}</if>
+            ORDER BY updated_at DESC, id DESC
+            </script>
+            """)
+    List<UserPracticeProgress> listByUserAndMode(@Param("userId") Long userId, @Param("mode") String mode);
 
     @Insert("""
             INSERT INTO user_practice_progress (

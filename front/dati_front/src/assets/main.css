@@ -772,6 +772,11 @@ a {
   font-weight: 900;
 }
 
+.category-practice-button.is-continue {
+  min-width: 78px;
+  background: #13c56b;
+}
+
 .category-tree-arrow {
   color: #98a2b3;
   transition: transform 0.16s ease;

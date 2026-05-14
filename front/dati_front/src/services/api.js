@@ -154,6 +154,7 @@ export const api = {
   favoriteQuestions: (userId, params = {}) => request(`/api/users/${userId}/favorite-questions?${query(params)}`),
   favoriteQuestionsPage: (userId, params = {}) => request(`/api/users/${userId}/favorite-questions/page?${query(params)}`),
   practiceProgress: (userId, params = {}) => request(`/api/users/${userId}/practice-progress?${query(params)}`),
+  practiceProgressList: (userId, params = {}) => request(`/api/users/${userId}/practice-progress/list?${query(params)}`),
   savePracticeProgress: (userId, body) =>
     request(`/api/users/${userId}/practice-progress`, {
       method: 'PUT',

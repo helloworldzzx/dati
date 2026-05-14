@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const auth = useAuthStore()
 const categories = ref([])
+const progressByCategory = ref(new Map())
 const loading = ref(false)
 const treeProps = {
   children: 'children',
@@ -22,6 +23,14 @@ function hasChildren(category) {
 
 function canPractice(category) {
   return !hasChildren(category) && category?.status === 'ENABLED'
+}
+
+function progressKey(categoryId) {
+  return String(categoryId || 'all')
+}
+
+function hasProgress(category) {
+  return progressByCategory.value.has(progressKey(category?.id))
 }
 
 function statusText(category) {
@@ -39,13 +48,22 @@ function handleNodeClick(node, category) {
     toggleNode(node)
     return
   }
-  if (canPractice(category)) startPractice(category)
+  if (canPractice(category)) startPractice(category, hasProgress(category))
 }
 
 async function load() {
   loading.value = true
   try {
-    categories.value = await api.categoryTree()
+    const [tree, progressList] = await Promise.all([
+      api.categoryTree(),
+      auth.user?.id ? api.practiceProgressList(auth.user.id, { mode: 'PRACTICE' }) : Promise.resolve([]),
+    ])
+    categories.value = tree
+    progressByCategory.value = new Map(
+      (Array.isArray(progressList) ? progressList : [])
+        .filter((progress) => progress?.categoryId)
+        .map((progress) => [progressKey(progress.categoryId), progress])
+    )
   } catch (err) {
     ElMessage.error(err.message || '加载分类失败')
   } finally {
@@ -53,10 +71,13 @@ async function load() {
   }
 }
 
-function startPractice(category) {
+function startPractice(category, resume = false) {
   router.push({
     path: '/answer/practice',
-    query: category ? { categoryId: category.id, title: category.name } : {},
+    query: {
+      ...(category ? { categoryId: category.id, title: category.name } : {}),
+      ...(resume ? { resume: '1' } : {}),
+    },
   })
 }
 
@@ -129,10 +150,11 @@ onMounted(load)
                 <button
                   v-if="canPractice(data)"
                   class="category-practice-button"
+                  :class="{ 'is-continue': hasProgress(data) }"
                   type="button"
-                  @click.stop="startPractice(data)"
+                  @click.stop="startPractice(data, hasProgress(data))"
                 >
-                  练习
+                  {{ hasProgress(data) ? '继续练习' : '练习' }}
                 </button>
                 <el-icon v-else-if="hasChildren(data)" :class="['category-tree-arrow', node.expanded ? 'open' : '']">
                   <ArrowRight />
