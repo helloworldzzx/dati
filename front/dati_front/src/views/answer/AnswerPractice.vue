@@ -13,6 +13,7 @@ const auth = useAuthStore()
 const QUESTION_BATCH_SIZE = 10
 const PREFETCH_REMAINING = 3
 const ANSWER_REVIEW_VISIBLE_MS = 30 * 60 * 1000
+const AUTO_NEXT_DELAY_MS = 260
 const loading = ref(false)
 const questionCache = ref(new Map())
 const loadedPages = ref(new Set())
@@ -51,6 +52,7 @@ const swipeGesture = reactive({
   suppressClickUntil: 0,
 })
 let saveTimer = null
+let autoNextTimer = null
 
 const SWIPE_MIN_DISTANCE = 72
 const SWIPE_DIRECTION_RATIO = 1.18
@@ -180,6 +182,23 @@ function normalizeQuestionPage(result) {
 function isFreshAnswerRecord(record) {
   if (!record?.submitted || !record?.answeredAt) return false
   return Date.now() - record.answeredAt <= ANSWER_REVIEW_VISIBLE_MS
+}
+
+function clearAutoNextTimer() {
+  if (!autoNextTimer) return
+  window.clearTimeout(autoNextTimer)
+  autoNextTimer = null
+}
+
+function scheduleAutoNext(questionId, correct, questionType) {
+  if (!correct || !['SINGLE', 'MULTIPLE'].includes(questionType) || nextDisabled.value) return
+  if (autoNextTimer) return
+  autoNextTimer = window.setTimeout(() => {
+    autoNextTimer = null
+    if (currentQuestion.value?.id === questionId && currentRecord.value?.correct) {
+      next()
+    }
+  }, AUTO_NEXT_DELAY_MS)
 }
 
 function recentAnswerStorageKey() {
@@ -562,16 +581,19 @@ async function submitAnswer(answer, options = {}) {
   }
 
   const questionId = currentQuestion.value.id
+  const questionType = currentQuestion.value.type
   if (options.optimistic) {
+    const localCorrect = judgeCurrentAnswer(answer)
     records[questionId] = {
       submitted: true,
       userAnswer: answer,
-      correct: judgeCurrentAnswer(answer),
+      correct: localCorrect,
       answeredAt: Date.now(),
     }
     delete drafts[questionId]
     saveRecentAnswerRecords()
     saveProgressNow()
+    scheduleAutoNext(questionId, localCorrect, questionType)
   }
 
   try {
@@ -591,6 +613,7 @@ async function submitAnswer(answer, options = {}) {
     delete drafts[questionId]
     saveRecentAnswerRecords()
     await saveProgressNow()
+    scheduleAutoNext(questionId, record.correct, questionType)
   } catch (err) {
     ElMessage.error(err.message || '提交失败')
   }
@@ -618,6 +641,7 @@ async function toggleFavorite() {
 
 async function switchToIndex(targetIndex, direction) {
   if (targetIndex < 0) return false
+  clearAutoNextTimer()
   try {
     let hasQuestion = questionCache.value.has(targetIndex)
     if (!hasQuestion) hasQuestion = await ensureQuestionAt(targetIndex)
@@ -812,6 +836,7 @@ function handleTouchCancel() {
 
 onMounted(loadQuestions)
 onBeforeUnmount(() => {
+  clearAutoNextTimer()
   saveRecentAnswerRecords()
   saveProgressNow()
 })
