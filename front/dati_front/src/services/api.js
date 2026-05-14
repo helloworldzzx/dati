@@ -125,6 +125,7 @@ export const api = {
   createUser: (body) => request('/api/admin/users', { method: 'POST', body }),
   updateUser: (id, body) => request(`/api/admin/users/${id}`, { method: 'PUT', body }),
   disableUser: (id) => request(`/api/admin/users/${id}/disable`, { method: 'PATCH' }),
+  resetUserPassword: (id) => request(`/api/admin/users/${id}/reset-password`, { method: 'PATCH' }),
   importUsers: (formData) => request('/api/admin/users/import', { method: 'POST', body: formData }),
   userImportTemplate: () => request('/api/admin/users/import-template'),
 

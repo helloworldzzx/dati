@@ -73,4 +73,10 @@ public class AdminUserController {
         userService.disableUser(id);
         return ApiResponse.ok();
     }
+
+    @PatchMapping("/{id}/reset-password")
+    public ApiResponse<Void> resetPassword(@PathVariable Long id) {
+        userService.resetPassword(id);
+        return ApiResponse.ok();
+    }
 }

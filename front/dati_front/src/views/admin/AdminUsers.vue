@@ -148,6 +148,21 @@ async function disable(user) {
   }
 }
 
+async function resetPassword(user) {
+  try {
+    await ElMessageBox.confirm(`确认将账号 ${user.username} 的密码重置为 123456？`, '重置密码', {
+      type: 'warning',
+      confirmButtonText: '重置',
+      cancelButtonText: '取消',
+    })
+    await api.resetUserPassword(user.id)
+    ElMessage.success('密码已重置为 123456')
+    await load()
+  } catch (err) {
+    if (err !== 'cancel') ElMessage.error(err.message || '操作失败')
+  }
+}
+
 async function downloadTemplate() {
   downloading.value = true
   try {
@@ -235,7 +250,7 @@ onMounted(load)
         <el-table-column label="姓名" min-width="120">
           <template #default="{ row }">{{ row.realName || '-' }}</template>
         </el-table-column>
-        <el-table-column label="手机号" min-width="140">
+        <el-table-column label="手机号" min-width="120">
           <template #default="{ row }">{{ row.phone || '-' }}</template>
         </el-table-column>
         <el-table-column label="角色" width="110">
@@ -255,9 +270,10 @@ onMounted(load)
         <el-table-column label="首次登录" width="110">
           <template #default="{ row }">{{ row.mustChangePassword ? '需完善' : '已完成' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
+            <el-button size="small" plain :icon="Refresh" @click="resetPassword(row)">重置密码</el-button>
             <el-button
               size="small"
               type="danger"

@@ -117,6 +117,12 @@ public class UserService {
     }
 
     @Transactional
+    public void resetPassword(Long id) {
+        getUser(id);
+        userMapper.updatePassword(id, passwordEncoder.encode(DEFAULT_PASSWORD), true);
+    }
+
+    @Transactional
     public UserImportResult importUsers(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Excel file is required");
