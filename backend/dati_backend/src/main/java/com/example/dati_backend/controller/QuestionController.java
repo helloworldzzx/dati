@@ -6,9 +6,12 @@ import com.example.dati_backend.dto.QuestionBatchDeleteRequest;
 import com.example.dati_backend.dto.QuestionDetailResponse;
 import com.example.dati_backend.dto.QuestionRequest;
 import com.example.dati_backend.entity.Question;
+import com.example.dati_backend.entity.SysUser;
 import com.example.dati_backend.service.QuestionService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,7 +34,7 @@ public class QuestionController {
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "20") Integer size
     ) {
-        return ApiResponse.ok(questionService.listQuestions(categoryId, type, status, page, size));
+        return ApiResponse.ok(questionService.listQuestions(categoryId, type, "ENABLED", page, size));
     }
 
     @GetMapping("/api/admin/questions")
@@ -48,9 +51,10 @@ public class QuestionController {
     @GetMapping("/api/questions/{id}")
     public ApiResponse<QuestionDetailResponse> getQuestion(
             @PathVariable Long id,
-            @RequestParam(required = false) Long userId
+            @RequestParam(required = false) Long userId,
+            @AuthenticationPrincipal SysUser currentUser
     ) {
-        return ApiResponse.ok(questionService.getQuestionDetail(id, userId));
+        return ApiResponse.ok(questionService.getQuestionDetail(id, questionDetailUserId(userId, currentUser)));
     }
 
     @PostMapping("/api/admin/questions")
@@ -76,5 +80,18 @@ public class QuestionController {
     public ApiResponse<Void> deleteQuestions(@RequestBody QuestionBatchDeleteRequest request) {
         questionService.deleteQuestions(request == null ? null : request.ids());
         return ApiResponse.ok();
+    }
+
+    private Long questionDetailUserId(Long requestedUserId, SysUser currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            return null;
+        }
+        if ("ADMIN".equalsIgnoreCase(currentUser.getRole())) {
+            return requestedUserId;
+        }
+        if (requestedUserId == null || requestedUserId.equals(currentUser.getId())) {
+            return currentUser.getId();
+        }
+        throw new AccessDeniedException("Cannot access another user's question state");
     }
 }

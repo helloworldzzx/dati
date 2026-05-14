@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -36,6 +37,7 @@ public class PracticeService {
     private final PracticeSessionMapper sessionMapper;
     private final AnswerRecordMapper answerRecordMapper;
     private final QuestionMapper questionMapper;
+    private final QuestionService questionService;
     private final UserQuestionStatMapper userQuestionStatMapper;
     private final UserAnswerStatMapper userAnswerStatMapper;
     private final UserPracticeProgressMapper userPracticeProgressMapper;
@@ -57,15 +59,21 @@ public class PracticeService {
 
     @Transactional
     public AnswerRecord submitAnswer(SubmitAnswerRequest request) {
+        return submitAnswer(request, false);
+    }
+
+    @Transactional
+    public AnswerRecord submitAnswer(SubmitAnswerRequest request, boolean admin) {
         if (request == null || request.userId() == null || request.questionId() == null) {
             throw new IllegalArgumentException("User id and question id are required");
         }
-        Question question = questionMapper.findById(request.questionId());
+        validateSessionOwner(request.sessionId(), request.userId(), admin);
+        Question question = questionService.getQuestionForAnswer(request.questionId());
         if (question == null) {
             throw new IllegalArgumentException("Question not found");
         }
 
-        Boolean correct = request.correct() != null ? request.correct() : judgeAnswer(question, request.userAnswer());
+        Boolean correct = judgeAnswer(question, request.userAnswer());
         int durationSeconds = request.durationSeconds() == null ? 0 : Math.max(request.durationSeconds(), 0);
 
         AnswerRecord record = new AnswerRecord();
@@ -105,6 +113,18 @@ public class PracticeService {
 
     @Transactional
     public void finishSession(Long sessionId) {
+        sessionMapper.finish(sessionId);
+    }
+
+    @Transactional
+    public void finishSession(Long sessionId, Long currentUserId, boolean admin) {
+        PracticeSession session = sessionMapper.findById(sessionId);
+        if (session == null) {
+            throw new IllegalArgumentException("Practice session not found");
+        }
+        if (!admin && !session.getUserId().equals(currentUserId)) {
+            throw new AccessDeniedException("Cannot finish another user's session");
+        }
         sessionMapper.finish(sessionId);
     }
 
@@ -156,6 +176,19 @@ public class PracticeService {
             return false;
         }
         return correctAnswer.equals(submittedAnswer);
+    }
+
+    private void validateSessionOwner(Long sessionId, Long userId, boolean admin) {
+        if (sessionId == null || admin) {
+            return;
+        }
+        PracticeSession session = sessionMapper.findById(sessionId);
+        if (session == null) {
+            throw new IllegalArgumentException("Practice session not found");
+        }
+        if (!session.getUserId().equals(userId)) {
+            throw new AccessDeniedException("Cannot submit answer to another user's session");
+        }
     }
 
     private String normalizeAnswer(String answer) {

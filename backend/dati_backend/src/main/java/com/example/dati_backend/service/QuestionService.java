@@ -1,5 +1,7 @@
 package com.example.dati_backend.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.example.dati_backend.dto.QuestionContentResponse;
 import com.example.dati_backend.dto.QuestionDetailResponse;
 import com.example.dati_backend.dto.PageResult;
 import com.example.dati_backend.dto.QuestionOptionRequest;
@@ -10,6 +12,7 @@ import com.example.dati_backend.mapper.QuestionCategoryMapper;
 import com.example.dati_backend.mapper.QuestionMapper;
 import com.example.dati_backend.mapper.QuestionOptionMapper;
 import com.example.dati_backend.mapper.UserQuestionStatMapper;
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -21,22 +24,47 @@ import org.springframework.util.StringUtils;
 @Service
 @RequiredArgsConstructor
 public class QuestionService {
+    private static final Duration QUESTION_DETAIL_CACHE_TTL = Duration.ofMinutes(5);
+    private static final Duration QUESTION_LIST_CACHE_TTL = Duration.ofMinutes(1);
+    private static final String QUESTION_DETAIL_CACHE_PREFIX = "dati:question:detail:";
+    private static final String QUESTION_LIST_CACHE_PREFIX = "dati:question:list:";
+
     private final QuestionMapper questionMapper;
     private final QuestionOptionMapper optionMapper;
     private final QuestionCategoryMapper categoryMapper;
     private final UserQuestionStatMapper userQuestionStatMapper;
+    private final RedisJsonCacheService cacheService;
 
     public QuestionDetailResponse getQuestionDetail(Long id) {
         return getQuestionDetail(id, null);
     }
 
     public QuestionDetailResponse getQuestionDetail(Long id, Long userId) {
-        Question question = getQuestion(id);
+        QuestionContentResponse content = getQuestionContent(id);
         return new QuestionDetailResponse(
-                question,
-                optionMapper.listByQuestionId(id),
+                content.question(),
+                content.options(),
                 userId == null ? null : userQuestionStatMapper.findByUserAndQuestion(userId, id)
         );
+    }
+
+    public QuestionContentResponse getQuestionContent(Long id) {
+        String cacheKey = questionDetailCacheKey(id);
+        TypeReference<QuestionContentResponse> typeReference = new TypeReference<>() {};
+        return cacheService.get(cacheKey, typeReference)
+                .orElseGet(() -> {
+                    Question question = getQuestion(id);
+                    QuestionContentResponse content = new QuestionContentResponse(
+                            question,
+                            optionMapper.listByQuestionId(id)
+                    );
+                    cacheService.set(cacheKey, content, QUESTION_DETAIL_CACHE_TTL);
+                    return content;
+                });
+    }
+
+    public Question getQuestionForAnswer(Long id) {
+        return getQuestionContent(id).question();
     }
 
     public Question getQuestion(Long id) {
@@ -50,7 +78,16 @@ public class QuestionService {
     public List<Question> listQuestions(Long categoryId, String type, String status, Integer page, Integer size) {
         int safePage = page == null || page < 1 ? 1 : page;
         int safeSize = size == null || size < 1 ? 20 : Math.min(size, 2000);
-        return questionMapper.list(categoryId, trimToNull(type), trimToNull(status), safeSize, (safePage - 1) * safeSize);
+        String safeType = trimToNull(type);
+        String safeStatus = trimToNull(status);
+        String cacheKey = questionListCacheKey(categoryId, safeType, safeStatus, safePage, safeSize);
+        TypeReference<List<Question>> typeReference = new TypeReference<>() {};
+        return cacheService.get(cacheKey, typeReference)
+                .orElseGet(() -> {
+                    List<Question> questions = questionMapper.list(categoryId, safeType, safeStatus, safeSize, (safePage - 1) * safeSize);
+                    cacheService.set(cacheKey, questions, QUESTION_LIST_CACHE_TTL);
+                    return questions;
+                });
     }
 
     public PageResult<Question> pageQuestions(Long categoryId, String type, String status, Integer page, Integer size) {
@@ -82,6 +119,7 @@ public class QuestionService {
     public void deleteQuestion(Long id) {
         getQuestion(id);
         questionMapper.deleteById(id);
+        clearQuestionCache(id);
     }
 
     @Transactional
@@ -93,6 +131,8 @@ public class QuestionService {
             throw new IllegalArgumentException("Question ids are required");
         }
         questionMapper.deleteBatch(safeIds);
+        safeIds.forEach(this::clearQuestionDetailCache);
+        clearQuestionListCache();
     }
 
     @Transactional
@@ -115,6 +155,7 @@ public class QuestionService {
         question.setCreatedBy(request.createdBy());
         questionMapper.insert(question);
         saveOptions(question.getId(), request.options());
+        clearQuestionListCache();
         return getQuestionDetail(question.getId());
     }
 
@@ -154,7 +195,34 @@ public class QuestionService {
             optionMapper.deleteByQuestionId(id);
             saveOptions(id, request.options());
         }
+        clearQuestionCache(id);
         return getQuestionDetail(id);
+    }
+
+    private void clearQuestionCache(Long questionId) {
+        clearQuestionDetailCache(questionId);
+        clearQuestionListCache();
+    }
+
+    private void clearQuestionDetailCache(Long questionId) {
+        cacheService.delete(questionDetailCacheKey(questionId));
+    }
+
+    private void clearQuestionListCache() {
+        cacheService.deleteByPattern(QUESTION_LIST_CACHE_PREFIX + "*");
+    }
+
+    private String questionDetailCacheKey(Long id) {
+        return QUESTION_DETAIL_CACHE_PREFIX + id;
+    }
+
+    private String questionListCacheKey(Long categoryId, String type, String status, int page, int size) {
+        return QUESTION_LIST_CACHE_PREFIX
+                + "category:" + (categoryId == null ? "all" : categoryId)
+                + ":type:" + (type == null ? "all" : type)
+                + ":status:" + (status == null ? "all" : status)
+                + ":page:" + page
+                + ":size:" + size;
     }
 
     private void saveOptions(Long questionId, List<QuestionOptionRequest> optionRequests) {

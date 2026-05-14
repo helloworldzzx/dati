@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS question (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_question_category_type_status (category_id, type, status),
+  KEY idx_question_status_id (status, id),
   KEY idx_question_created_by (created_by),
   CONSTRAINT fk_question_category
     FOREIGN KEY (category_id) REFERENCES question_category (id)
@@ -178,6 +179,8 @@ CREATE TABLE IF NOT EXISTS user_question_stat (
   UNIQUE KEY uk_user_question_stat_user_question (user_id, question_id),
   KEY idx_user_question_stat_wrong (user_id, wrong_count),
   KEY idx_user_question_stat_favorite (user_id, is_favorite),
+  KEY idx_uqs_wrong_time (user_id, wrong_count, last_answered_at),
+  KEY idx_uqs_favorite_time (user_id, is_favorite, favorite_at),
   CONSTRAINT fk_user_question_stat_user
     FOREIGN KEY (user_id) REFERENCES sys_user (id)
     ON UPDATE CASCADE ON DELETE CASCADE,

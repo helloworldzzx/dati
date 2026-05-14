@@ -1,10 +1,12 @@
 package com.example.dati_backend.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.example.dati_backend.dto.CategoryRequest;
 import com.example.dati_backend.dto.CategoryTreeNode;
 import com.example.dati_backend.entity.QuestionCategory;
 import com.example.dati_backend.mapper.QuestionMapper;
 import com.example.dati_backend.mapper.QuestionCategoryMapper;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,10 +19,26 @@ import org.springframework.util.StringUtils;
 @Service
 @RequiredArgsConstructor
 public class CategoryService {
+    private static final Duration CATEGORY_CACHE_TTL = Duration.ofMinutes(10);
+    private static final String CATEGORY_TREE_CACHE_KEY = "dati:category:tree";
+    private static final String CATEGORY_LIST_CACHE_PREFIX = "dati:category:list:";
+
     private final QuestionCategoryMapper categoryMapper;
     private final QuestionMapper questionMapper;
+    private final RedisJsonCacheService cacheService;
 
     public List<QuestionCategory> listCategories(Long parentId) {
+        String cacheKey = categoryListCacheKey(parentId);
+        TypeReference<List<QuestionCategory>> typeReference = new TypeReference<>() {};
+        return cacheService.get(cacheKey, typeReference)
+                .orElseGet(() -> {
+                    List<QuestionCategory> categories = loadCategories(parentId);
+                    cacheService.set(cacheKey, categories, CATEGORY_CACHE_TTL);
+                    return categories;
+                });
+    }
+
+    private List<QuestionCategory> loadCategories(Long parentId) {
         if (parentId == null || parentId == 0) {
             return categoryMapper.listAll();
         }
@@ -28,6 +46,16 @@ public class CategoryService {
     }
 
     public List<CategoryTreeNode> categoryTree() {
+        TypeReference<List<CategoryTreeNode>> typeReference = new TypeReference<>() {};
+        return cacheService.get(CATEGORY_TREE_CACHE_KEY, typeReference)
+                .orElseGet(() -> {
+                    List<CategoryTreeNode> tree = buildCategoryTree();
+                    cacheService.set(CATEGORY_TREE_CACHE_KEY, tree, CATEGORY_CACHE_TTL);
+                    return tree;
+                });
+    }
+
+    private List<CategoryTreeNode> buildCategoryTree() {
         List<QuestionCategory> categories = categoryMapper.listAll();
         Map<Long, CategoryTreeNode> nodeMap = new LinkedHashMap<>();
         List<CategoryTreeNode> roots = new ArrayList<>();
@@ -59,6 +87,7 @@ public class CategoryService {
         QuestionCategory category = new QuestionCategory();
         fillCategory(category, request, true);
         categoryMapper.insert(category);
+        clearCategoryCache();
         return getCategory(category.getId());
     }
 
@@ -67,6 +96,7 @@ public class CategoryService {
         QuestionCategory category = getCategory(id);
         fillCategory(category, request, false);
         categoryMapper.update(category);
+        clearCategoryCache();
         return getCategory(id);
     }
 
@@ -74,6 +104,7 @@ public class CategoryService {
     public void disableCategory(Long id) {
         getCategory(id);
         categoryMapper.updateStatus(id, "DISABLED");
+        clearCategoryCache();
     }
 
     @Transactional
@@ -86,6 +117,16 @@ public class CategoryService {
             throw new IllegalArgumentException("该分类下还有题目，不能删除");
         }
         categoryMapper.deleteById(id);
+        clearCategoryCache();
+    }
+
+    private void clearCategoryCache() {
+        cacheService.delete(CATEGORY_TREE_CACHE_KEY);
+        cacheService.deleteByPattern(CATEGORY_LIST_CACHE_PREFIX + "*");
+    }
+
+    private String categoryListCacheKey(Long parentId) {
+        return CATEGORY_LIST_CACHE_PREFIX + (parentId == null || parentId == 0 ? "all" : "parent:" + parentId);
     }
 
     private void fillCategory(QuestionCategory category, CategoryRequest request, boolean creating) {

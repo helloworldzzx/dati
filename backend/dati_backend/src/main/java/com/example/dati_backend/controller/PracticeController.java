@@ -9,11 +9,14 @@ import com.example.dati_backend.dto.SubmitAnswerRequest;
 import com.example.dati_backend.entity.AnswerRecord;
 import com.example.dati_backend.entity.PracticeSession;
 import com.example.dati_backend.entity.Question;
+import com.example.dati_backend.entity.SysUser;
 import com.example.dati_backend.entity.UserQuestionStat;
 import com.example.dati_backend.service.PracticeService;
 import com.example.dati_backend.service.QuestionService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,62 +33,114 @@ public class PracticeController {
     private final QuestionService questionService;
 
     @PostMapping("/api/practice/sessions")
-    public ApiResponse<PracticeSession> startSession(@RequestBody PracticeSessionRequest request) {
-        return ApiResponse.ok(practiceService.startSession(request));
+    public ApiResponse<PracticeSession> startSession(
+            @AuthenticationPrincipal SysUser currentUser,
+            @RequestBody PracticeSessionRequest request
+    ) {
+        Long userId = accessibleUserId(request == null ? null : request.userId(), currentUser);
+        PracticeSessionRequest safeRequest = new PracticeSessionRequest(
+                userId,
+                request == null ? null : request.categoryId(),
+                request == null ? null : request.mode(),
+                request == null ? null : request.totalCount()
+        );
+        return ApiResponse.ok(practiceService.startSession(safeRequest));
     }
 
     @PatchMapping("/api/practice/sessions/{sessionId}/finish")
-    public ApiResponse<Void> finishSession(@PathVariable Long sessionId) {
-        practiceService.finishSession(sessionId);
+    public ApiResponse<Void> finishSession(
+            @AuthenticationPrincipal SysUser currentUser,
+            @PathVariable Long sessionId
+    ) {
+        practiceService.finishSession(sessionId, currentUserId(currentUser), isAdmin(currentUser));
         return ApiResponse.ok();
     }
 
     @PostMapping("/api/practice/answers")
-    public ApiResponse<AnswerRecord> submitAnswer(@RequestBody SubmitAnswerRequest request) {
-        return ApiResponse.ok(practiceService.submitAnswer(request));
+    public ApiResponse<AnswerRecord> submitAnswer(
+            @AuthenticationPrincipal SysUser currentUser,
+            @RequestBody SubmitAnswerRequest request
+    ) {
+        Long userId = accessibleUserId(request == null ? null : request.userId(), currentUser);
+        SubmitAnswerRequest safeRequest = new SubmitAnswerRequest(
+                request == null ? null : request.sessionId(),
+                userId,
+                request == null ? null : request.questionId(),
+                request == null ? null : request.userAnswer(),
+                null,
+                request == null ? null : request.durationSeconds()
+        );
+        return ApiResponse.ok(practiceService.submitAnswer(safeRequest, isAdmin(currentUser)));
     }
 
     @GetMapping("/api/users/{userId}/wrong-questions")
     public ApiResponse<List<Question>> wrongQuestions(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size
+            @RequestParam(defaultValue = "10") Integer size,
+            @AuthenticationPrincipal SysUser currentUser
     ) {
-        return ApiResponse.ok(questionService.listWrongQuestions(userId, page, size));
+        return ApiResponse.ok(questionService.listWrongQuestions(accessibleUserId(userId, currentUser), page, size));
     }
 
     @GetMapping("/api/users/{userId}/favorite-questions")
     public ApiResponse<List<Question>> favoriteQuestions(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size
+            @RequestParam(defaultValue = "10") Integer size,
+            @AuthenticationPrincipal SysUser currentUser
     ) {
-        return ApiResponse.ok(questionService.listFavoriteQuestions(userId, page, size));
+        return ApiResponse.ok(questionService.listFavoriteQuestions(accessibleUserId(userId, currentUser), page, size));
     }
 
     @GetMapping("/api/users/{userId}/practice-progress")
     public ApiResponse<PracticeProgressResponse> getProgress(
             @PathVariable Long userId,
             @RequestParam(required = false) String mode,
-            @RequestParam(required = false) Long categoryId
+            @RequestParam(required = false) Long categoryId,
+            @AuthenticationPrincipal SysUser currentUser
     ) {
-        return ApiResponse.ok(practiceService.getProgress(userId, mode, categoryId));
+        return ApiResponse.ok(practiceService.getProgress(accessibleUserId(userId, currentUser), mode, categoryId));
     }
 
     @PutMapping("/api/users/{userId}/practice-progress")
     public ApiResponse<PracticeProgressResponse> saveProgress(
             @PathVariable Long userId,
-            @RequestBody PracticeProgressRequest request
+            @RequestBody PracticeProgressRequest request,
+            @AuthenticationPrincipal SysUser currentUser
     ) {
-        return ApiResponse.ok(practiceService.saveProgress(userId, request));
+        return ApiResponse.ok(practiceService.saveProgress(accessibleUserId(userId, currentUser), request));
     }
 
     @PutMapping("/api/users/{userId}/questions/{questionId}/favorite")
     public ApiResponse<UserQuestionStat> updateFavorite(
             @PathVariable Long userId,
             @PathVariable Long questionId,
-            @RequestBody(required = false) FavoriteRequest request
+            @RequestBody(required = false) FavoriteRequest request,
+            @AuthenticationPrincipal SysUser currentUser
     ) {
-        return ApiResponse.ok(practiceService.updateFavorite(userId, questionId, request));
+        return ApiResponse.ok(practiceService.updateFavorite(accessibleUserId(userId, currentUser), questionId, request));
+    }
+
+    private Long accessibleUserId(Long requestedUserId, SysUser currentUser) {
+        Long currentUserId = currentUserId(currentUser);
+        if (isAdmin(currentUser)) {
+            return requestedUserId == null ? currentUserId : requestedUserId;
+        }
+        if (requestedUserId == null || requestedUserId.equals(currentUserId)) {
+            return currentUserId;
+        }
+        throw new AccessDeniedException("Cannot access another user's data");
+    }
+
+    private Long currentUserId(SysUser currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new AccessDeniedException("Not logged in");
+        }
+        return currentUser.getId();
+    }
+
+    private boolean isAdmin(SysUser currentUser) {
+        return currentUser != null && "ADMIN".equalsIgnoreCase(currentUser.getRole());
     }
 }
