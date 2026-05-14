@@ -921,7 +921,11 @@ onBeforeUnmount(() => {
               <div class="answer-section-inner">
                 <h2 class="answer-section-title">
                   <el-icon><Document /></el-icon>答案</h2>
-                <div class="answer-result-box">
+                <div v-if="currentQuestion.type === 'ANALYSIS'" class="answer-reference-box">
+                  <span>参考答案：</span>
+                  <strong>{{ currentQuestion.correctAnswer || '暂无参考答案' }}</strong>
+                </div>
+                <div v-else class="answer-result-box">
                   <div class="answer-result-row">
                     <span>正确答案：</span>
                     <strong style="color: #13c56b">{{ answerLabel(currentQuestion.correctAnswer) }}</strong>
