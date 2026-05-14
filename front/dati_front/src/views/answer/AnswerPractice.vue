@@ -479,12 +479,20 @@ function toggleOption(option) {
   if (submitted.value) return
   const key = option.optionKey
   if (currentQuestion.value.type === 'MULTIPLE') {
+    let nextAnswers = []
     if (selectedAnswers.value.includes(key)) {
-      selectedAnswers.value = selectedAnswers.value.filter((item) => item !== key)
+      nextAnswers = selectedAnswers.value.filter((item) => item !== key)
     } else {
-      selectedAnswers.value = [...selectedAnswers.value, key].sort()
+      nextAnswers = [...selectedAnswers.value, key].sort()
     }
-    saveDraft()
+    selectedAnswers.value = nextAnswers
+
+    const correctCount = splitAnswer(currentQuestion.value.correctAnswer).length
+    if (correctCount > 0 && nextAnswers.length >= correctCount) {
+      submitAnswer(nextAnswers.join(','), { optimistic: true })
+    } else {
+      saveDraft()
+    }
     return
   }
   selectedAnswers.value = [key]
@@ -497,8 +505,8 @@ function optionClass(option) {
   const selected = selectedAnswers.value.includes(key) || currentRecord.value?.userAnswer?.split(',').includes(key)
   const correctKeys = splitAnswer(currentQuestion.value?.correctAnswer)
 
-  if (selected) classes.push('selected')
-  if (submitted.value && correctKeys.includes(key)) classes.push('correct')
+  if (!submitted.value && selected) classes.push('selected')
+  if (submitted.value && correctKeys.includes(key)) classes.push(selected ? 'correct' : 'missed')
   if (submitted.value && selected && !correctKeys.includes(key)) classes.push('wrong')
   return classes
 }
@@ -507,13 +515,15 @@ function optionKeyLabel(option) {
   const key = option.optionKey
   if (key === 'TRUE') return '对'
   if (key === 'FALSE') return '错'
-  if (currentQuestion.value?.type !== 'SINGLE' || !submitted.value) return key
+  const type = currentQuestion.value?.type
+  if (!['SINGLE', 'MULTIPLE'].includes(type) || !submitted.value) return key
 
   const selected = selectedAnswers.value.includes(key) || currentRecord.value?.userAnswer?.split(',').includes(key)
-  if (!selected) return key
 
   const correctKeys = splitAnswer(currentQuestion.value?.correctAnswer)
-  return correctKeys.includes(key) ? '✓' : '×'
+  if (selected && correctKeys.includes(key)) return '✓'
+  if (selected && !correctKeys.includes(key)) return '×'
+  return key
 }
 
 function splitAnswer(value) {

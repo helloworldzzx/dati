@@ -1401,6 +1401,16 @@ a {
   color: #13c56b;
 }
 
+.option-mobile.missed .option-key {
+  border-color: #13c56b;
+  background: #ecfdf4;
+  color: #13c56b;
+}
+
+.option-mobile.missed .option-text {
+  color: #13c56b;
+}
+
 .option-mobile.wrong .option-key {
   border-color: #ff4d4f;
   background: #ff4d4f;
