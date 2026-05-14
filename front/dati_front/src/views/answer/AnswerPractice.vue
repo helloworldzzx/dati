@@ -32,6 +32,10 @@ const pageTurn = ref('next')
 
 const records = reactive({})
 const drafts = reactive({})
+const navGesture = reactive({
+  handledUntil: 0,
+  busy: false,
+})
 const swipeGesture = reactive({
   startX: 0,
   startY: 0,
@@ -559,7 +563,7 @@ async function switchToIndex(targetIndex, direction) {
         currentDetail.value = { question: targetItem, options: [], stat: null }
         selectedAnswers.value = []
         analysisAnswer.value = ''
-        await loadCurrentDetail()
+        loadCurrentDetail().catch(() => {})
       }
       prefetchAround(targetIndex)
       prefetchNeighborDetails(targetIndex)
@@ -586,6 +590,30 @@ async function next() {
   if (switched) return true
   ElMessage.info('已经是最后一题')
   return false
+}
+
+async function runNav(direction) {
+  if (navGesture.busy) return
+  navGesture.busy = true
+  try {
+    if (direction === 'prev') await previous()
+    else await next()
+  } finally {
+    window.setTimeout(() => {
+      navGesture.busy = false
+    }, 80)
+  }
+}
+
+function handleNavPointer(event, direction) {
+  event?.preventDefault?.()
+  navGesture.handledUntil = Date.now() + 360
+  runNav(direction)
+}
+
+function handleNavClick(direction) {
+  if (Date.now() < navGesture.handledUntil) return
+  runNav(direction)
 }
 
 function globalAccuracy(question) {
@@ -836,8 +864,20 @@ onBeforeUnmount(() => {
             提交答案
           </el-button>
           <div class="question-nav-row">
-            <el-button :icon="ArrowLeft" :disabled="currentIndex === 0" @click="previous">上一题</el-button>
-            <el-button type="primary" :disabled="nextDisabled" @click="next">
+            <el-button
+              :icon="ArrowLeft"
+              :disabled="currentIndex === 0"
+              @pointerup="handleNavPointer($event, 'prev')"
+              @click="handleNavClick('prev')"
+            >
+              上一题
+            </el-button>
+            <el-button
+              type="primary"
+              :disabled="nextDisabled"
+              @pointerup="handleNavPointer($event, 'next')"
+              @click="handleNavClick('next')"
+            >
               下一题
               <el-icon class="el-icon--right"><ArrowRight /></el-icon>
             </el-button>

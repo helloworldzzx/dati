@@ -1486,8 +1486,11 @@ a {
 
 .question-submit-button,
 .question-nav-row .el-button {
+  -webkit-tap-highlight-color: transparent;
   min-height: 44px;
   margin-left: 0 !important;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 .question-submit-button {
