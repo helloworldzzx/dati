@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Document, Star, StarFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
+import { answerLabel, isAnswerCorrect, shouldAutoSubmitMultiple, splitAnswer } from '@/services/answer'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -31,6 +32,8 @@ const selectedAnswers = ref([])
 const analysisAnswer = ref('')
 const favoriteIds = ref(new Set())
 const pageTurn = ref('next')
+const activeMode = ref('PRACTICE')
+const activeCategoryId = ref(null)
 
 const records = reactive({})
 const drafts = reactive({})
@@ -60,7 +63,8 @@ const SWIPE_MAX_DRAG_RATIO = 0.86
 const SWIPE_RESISTANCE = 0.32
 
 const mode = computed(() => route.query.mode || 'practice')
-const categoryId = computed(() => (route.query.categoryId ? Number(route.query.categoryId) : null))
+const categoryId = computed(() => normalizeCategoryValue(route.query.categoryId))
+const routeScopeKey = computed(() => `${normalizeModeValue(mode.value)}:${categoryId.value || 'all'}`)
 const backTarget = computed(() => {
   const target = Array.isArray(route.query.return) ? route.query.return[0] : route.query.return
   if (typeof target === 'string' && target.startsWith('/answer')) return target
@@ -128,6 +132,13 @@ watch(analysisAnswer, () => {
   if (currentQuestion.value?.type === 'ANALYSIS' && !submitted.value) saveDraft()
 })
 
+watch(routeScopeKey, async () => {
+  if (route.name !== 'answer-practice') return
+  clearAutoNextTimer()
+  await saveProgressNow()
+  await loadQuestions()
+})
+
 function typeLabel(type) {
   return {
     SINGLE: '单选题',
@@ -138,9 +149,28 @@ function typeLabel(type) {
 }
 
 function normalizeMode() {
-  if (mode.value === 'wrong') return 'WRONG_BOOK'
-  if (mode.value === 'favorite') return 'FAVORITE'
+  return activeMode.value
+}
+
+function normalizeModeValue(value) {
+  if (value === 'wrong' || value === 'WRONG_BOOK') return 'WRONG_BOOK'
+  if (value === 'favorite' || value === 'FAVORITE') return 'FAVORITE'
   return 'PRACTICE'
+}
+
+function normalizeCategoryValue(value) {
+  const nextValue = Array.isArray(value) ? value[0] : value
+  const nextNumber = Number(nextValue)
+  return Number.isFinite(nextNumber) && nextNumber > 0 ? nextNumber : null
+}
+
+function syncActiveScopeFromRoute() {
+  activeMode.value = normalizeModeValue(mode.value)
+  activeCategoryId.value = normalizeCategoryValue(route.query.categoryId)
+}
+
+function activeScopeKey() {
+  return `${activeMode.value}:${activeCategoryId.value || 'all'}`
 }
 
 function replaceReactiveObject(target, source) {
@@ -206,7 +236,7 @@ function recentAnswerStorageKey() {
     'dati_answer_recent_records',
     auth.user?.id || 'guest',
     normalizeMode(),
-    categoryId.value || 'all',
+    activeCategoryId.value || 'all',
   ].join(':')
 }
 
@@ -254,6 +284,7 @@ function trimQuestionBuffer(centerIndex = currentIndex.value) {
 async function fetchQuestionPage(page) {
   if (page < 1 || loadedPages.value.has(page)) return
   if (pageRequests.has(page)) return pageRequests.get(page)
+  const requestScope = activeScopeKey()
 
   const request = (async () => {
     setWithCopy(loadingPages, page, true)
@@ -261,17 +292,18 @@ async function fetchQuestionPage(page) {
       const params = { page, size: QUESTION_BATCH_SIZE }
       let result = null
 
-      if (mode.value === 'wrong') {
+      if (activeMode.value === 'WRONG_BOOK') {
         result = await api.wrongQuestionsPage(auth.user.id, params)
-      } else if (mode.value === 'favorite') {
+      } else if (activeMode.value === 'FAVORITE') {
         result = await api.favoriteQuestionsPage(auth.user.id, params)
       } else {
         result = await api.questionPage({
-          categoryId: categoryId.value,
+          categoryId: activeCategoryId.value,
           status: 'ENABLED',
           ...params,
         })
       }
+      if (requestScope !== activeScopeKey()) return
 
       const { rows, total } = normalizeQuestionPage(result)
       const startIndex = (page - 1) * QUESTION_BATCH_SIZE
@@ -282,7 +314,7 @@ async function fetchQuestionPage(page) {
       questionCache.value = nextCache
       setWithCopy(loadedPages, page, true)
 
-      if (mode.value === 'favorite') {
+      if (activeMode.value === 'FAVORITE') {
         const ids = new Set(favoriteIds.value)
         rows.forEach((item) => ids.add(item.id))
         favoriteIds.value = ids
@@ -343,7 +375,7 @@ async function prefetchNeighborDetails(index) {
 async function loadSavedProgress() {
   return api.practiceProgress(auth.user.id, {
     mode: normalizeMode(),
-    categoryId: categoryId.value,
+    categoryId: activeCategoryId.value,
   })
 }
 
@@ -369,7 +401,7 @@ function progressPayload() {
 
   return {
     mode: normalizeMode(),
-    categoryId: categoryId.value,
+    categoryId: activeCategoryId.value,
     currentIndex: currentIndex.value,
     currentQuestionId: current?.id || null,
     questionIds,
@@ -408,6 +440,7 @@ function saveDraft() {
 async function loadQuestions() {
   loading.value = true
   restoringProgress.value = true
+  syncActiveScopeFromRoute()
   resetQuestionBuffer()
   try {
     const progress = await loadSavedProgress()
@@ -517,8 +550,7 @@ function toggleOption(option) {
     }
     selectedAnswers.value = nextAnswers
 
-    const correctCount = splitAnswer(currentQuestion.value.correctAnswer).length
-    if (correctCount > 0 && nextAnswers.length >= correctCount) {
+    if (shouldAutoSubmitMultiple(currentQuestion.value.correctAnswer, nextAnswers)) {
       submitAnswer(nextAnswers.join(','), { optimistic: true })
     } else {
       saveDraft()
@@ -556,14 +588,6 @@ function optionKeyLabel(option) {
   return key
 }
 
-function splitAnswer(value) {
-  if (!value) return []
-  return String(value)
-    .split(/[,，、\s]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
 function currentAnswer() {
   if (!currentQuestion.value) return ''
   if (currentQuestion.value.type === 'ANALYSIS') return analysisAnswer.value.trim()
@@ -572,16 +596,7 @@ function currentAnswer() {
 
 function judgeCurrentAnswer(answer) {
   if (!currentQuestion.value || currentQuestion.value.type === 'ANALYSIS') return null
-  const correctAnswer = splitAnswer(currentQuestion.value.correctAnswer).sort().join(',')
-  const userAnswer = splitAnswer(answer).sort().join(',')
-  if (!correctAnswer) return null
-  return correctAnswer === userAnswer
-}
-
-function answerLabel(answer) {
-  if (answer === 'TRUE') return '正确'
-  if (answer === 'FALSE') return '错误'
-  return answer || '-'
+  return isAnswerCorrect(currentQuestion.value.correctAnswer, answer)
 }
 
 async function submitAnswer(answer, options = {}) {
